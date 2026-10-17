@@ -1,11 +1,6 @@
-
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
-    {
-      "source": "/auth-proxy-test",
-      "destination": "https://dailyquest-6fbb3.firebaseapp.com/__/auth/handler"
-    },
     {
       "source": "/__/auth/:path*",
       "destination": "https://dailyquest-6fbb3.firebaseapp.com/__/auth/:path*"
