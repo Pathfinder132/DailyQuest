@@ -2162,3 +2162,53 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #15b8d2; outli
   .home-page #question-card-start .solution-code { font-size: 11px; }
   .home-page #question-card-start .takeaway-box p { font-size: 10.5px; line-height: 1.55; }
 }
+
+/* Second readability pass: a little larger than the previous pass, while keeping the layout intact. */
+@media (min-width: 901px) and (min-height: 721px) {
+  .home-page #question-card-start .category-tag,
+  .home-page #question-card-start .difficulty-tag,
+  .home-page #question-card-start .potd-tag,
+  .home-page #question-card-start .math-tag { font-size: 13px; }
+  .home-page #question-card-start .question-prompt {
+    font-size: clamp(27px, 1.7vw, 34px);
+    line-height: 1.36;
+  }
+  .home-page #question-card-start .question-code { font-size: 13px; }
+  .home-page #question-card-start .answer-option { min-height: 65px; }
+  .home-page #question-card-start .answer-copy { font-size: 17px; line-height: 1.43; }
+  .home-page #question-card-start .answer-feedback strong { font-size: 15px; }
+  .home-page #question-card-start .answer-feedback p { font-size: 13px; }
+  .home-page #question-card-start .solution-heading h3 { font-size: 17px; }
+  .home-page #question-card-start .solution-copy { font-size: 15px; line-height: 1.65; }
+  .home-page #question-card-start .solution-code { font-size: 13px; }
+  .home-page #question-card-start .takeaway-box p { font-size: 12px; line-height: 1.6; }
+  .home-page #question-card-start .lock-note { font-size: 12px; }
+  .home-page #question-card-start .math-generate-button,
+  .home-page #question-card-start .text-button { font-size: 12px; }
+  .home-page #question-card-start .randomize-button { font-size: 13px; }
+}
+
+@media (min-width: 901px) and (max-height: 720px) {
+  .home-page #question-card-start .question-prompt { font-size: clamp(23px, 1.45vw, 26px); }
+  .home-page #question-card-start .answer-copy { font-size: 13px; }
+  .home-page #question-card-start .answer-feedback strong { font-size: 13px; }
+  .home-page #question-card-start .answer-feedback p { font-size: 11px; }
+  .home-page #question-card-start .solution-heading h3 { font-size: 15px; }
+  .home-page #question-card-start .solution-copy { font-size: 12px; line-height: 1.5; }
+  .home-page #question-card-start .takeaway-box p { font-size: 11px; }
+}
+
+@media (max-width: 900px) {
+  .home-page #question-card-start .category-tag,
+  .home-page #question-card-start .difficulty-tag,
+  .home-page #question-card-start .potd-tag,
+  .home-page #question-card-start .math-tag { font-size: 12px; }
+  .home-page #question-card-start .question-prompt { font-size: clamp(23px, 6vw, 32px); line-height: 1.38; }
+  .home-page #question-card-start .answer-copy { font-size: clamp(14px, 3.7vw, 17px); line-height: 1.45; }
+  .home-page #question-card-start .answer-feedback strong { font-size: 13px; }
+  .home-page #question-card-start .answer-feedback p { font-size: 11px; }
+  .home-page #question-card-start .solution-heading h3 { font-size: 16px; }
+  .home-page #question-card-start .solution-copy { font-size: 13px; line-height: 1.65; }
+  .home-page #question-card-start .solution-code { font-size: 12px; }
+  .home-page #question-card-start .takeaway-box p { font-size: 11.5px; line-height: 1.6; }
+}
