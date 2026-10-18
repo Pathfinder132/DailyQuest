@@ -24,7 +24,7 @@ export default function QuestionCard({
   const isCorrect = selectedOptionId && selectedOptionId === question.correctAnswer;
 
   return (
-    <section className={`question-card animate-popIn ${randomizing ? 'question-randomizing' : ''}`}>
+    <section id="question-card-start" className={`question-card animate-popIn ${randomizing ? 'question-randomizing' : ''}`}>
       <div className="question-topline">
         <div className="question-tags">
           <span className="category-tag"><CircleHelp size={13} strokeWidth={3} /> {question.category}</span>

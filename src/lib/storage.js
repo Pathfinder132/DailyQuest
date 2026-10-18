@@ -153,7 +153,7 @@ export function exportProgress(store) {
   const href = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = href;
-  link.download = 'uttej-warmup-progress.json';
+  link.download = 'dailyquest-progress.json';
   link.click();
   URL.revokeObjectURL(href);
 }

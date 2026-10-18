@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, BookOpen, CalendarCheck, CheckCircle2, Cloud, CheckCircle, Download, Flame, History, Sparkles, Target, Upload } from 'lucide-react';
+import { Activity, BookOpen, CalendarCheck, CheckCircle2, Cloud, CloudCheck, Download, Flame, History, Sparkles, Target, Upload } from 'lucide-react';
 import { formatDateTime, localDateKey } from '../lib/utils.js';
 
 export default function StatsPanel({ store, streak, level, petLevel, onOpenImport, onExport, syncMode = 'local' }) {
@@ -59,7 +59,7 @@ export default function StatsPanel({ store, streak, level, petLevel, onOpenImpor
           <button type="button" onClick={onOpenImport}><Upload size={15} /> Import questions</button>
           <button type="button" onClick={onExport}><Download size={15} /> Export progress</button>
         </div>
-        <div className={`storage-note ${syncMode === 'cloud' ? 'storage-note-cloud' : ''}`}><span className="storage-dot" /><span>{syncMode === 'cloud' ? 'Your profile syncs across devices' : 'Saved locally on this device'}</span>{syncMode === 'cloud' ? <Cloud size={13} /> : <Cloud size={13} />}</div>
+        <div className={`storage-note ${syncMode === 'cloud' ? 'storage-note-cloud' : ''}`}><span className="storage-dot" /><span>{syncMode === 'cloud' ? 'Your profile syncs across devices' : 'Saved locally on this device'}</span>{syncMode === 'cloud' ? <CloudCheck size={13} /> : <Cloud size={13} />}</div>
       </section>
     </aside>
   );

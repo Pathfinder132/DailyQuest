@@ -1319,3 +1319,31 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #15b8d2; outli
 @media (max-width: 600px) {
   .floating-controls { right: 13px; }
 }
+
+
+/* Slightly stronger utility controls for data import/export and sign-out. */
+.data-actions button {
+  min-height: 38px;
+  padding: 8px 10px;
+  border-width: 1.5px;
+  font-size: 10px;
+  font-weight: 800;
+}
+.data-actions button svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 2.5;
+  flex: 0 0 auto;
+}
+.auth-signout-button {
+  width: 32px;
+  height: 32px;
+  border-width: 1.5px;
+  color: #443452;
+}
+#question-card-start { scroll-margin-top: 10px; }
+@media (max-width: 600px) {
+  .data-actions { gap: 8px; }
+  .data-actions button { min-height: 40px; padding: 8px 9px; font-size: 10px; }
+  .auth-signout-button { width: 30px; height: 30px; }
+}

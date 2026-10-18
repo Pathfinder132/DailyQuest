@@ -56,7 +56,7 @@ const PIXEL_CLASSES = {
 
 const LINES = {
   idle: [
-    'Wake up Uttej! Time to grind!',
+    'Wake up! Time to grind!',
     '1 problem a day keeps the brain rot away!',
     'Show me what you got!',
   ],
@@ -64,9 +64,14 @@ const LINES = {
   dizzy: ["Ouch! We'll get 'em next time!", 'Check the colorful breakdown below!', 'Review the solution and run it back!'],
 };
 
-export default function PixelPet({ mood = 'idle', level = 1, messageIndex = 0 }) {
+export default function PixelPet({ mood = 'idle', level = 1, messageIndex = 0, userName = '' }) {
   const frame = PET_FRAMES[mood] || PET_FRAMES.idle;
-  const line = LINES[mood] || LINES.idle;
+  const idleLines = [
+    userName ? `Wake up ${userName}! Time to grind!` : 'Wake up! Time to grind!',
+    '1 problem a day keeps the brain rot away!',
+    'Show me what you got!',
+  ];
+  const line = mood === 'idle' ? idleLines : (LINES[mood] || idleLines);
   const message = line[messageIndex % line.length];
 
   return (

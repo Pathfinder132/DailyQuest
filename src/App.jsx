@@ -28,7 +28,7 @@ function getFirstName(user) {
   const displayName = String(user?.displayName || '').trim();
   if (displayName) return displayName.split(/\s+/)[0];
   const emailName = String(user?.email || '').split('@')[0].trim();
-  return emailName || 'Uttej';
+  return emailName;
 }
 
 function stableSerialize(value) {
@@ -379,18 +379,22 @@ export default function App() {
   }
 
   function scrollPageToTop() {
-    // On mobile/tablet, preserve the current scroll position so changing questions
-    // doesn't pull the user away from the question area. Desktop keeps the top reset.
-    if (window.matchMedia('(max-width: 900px)').matches) {
-      const currentScrollY = window.scrollY;
-      window.requestAnimationFrame(() => {
-        window.scrollTo({ top: currentScrollY, left: 0, behavior: 'auto' });
-      });
-      return;
-    }
-
+    // Desktop keeps the original page-top reset. On mobile/tablet, focus the TOP
+    // of the newly rendered question card (not the actions row or prior scroll spot).
+    const isMobileOrTablet = window.matchMedia('(max-width: 900px)').matches;
     window.requestAnimationFrame(() => {
-      window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+      // Wait another frame so React has mounted the newly selected question card.
+      window.requestAnimationFrame(() => {
+        if (isMobileOrTablet) {
+          const questionCard = document.getElementById('question-card-start');
+          if (questionCard) {
+            const cardTop = questionCard.getBoundingClientRect().top + window.scrollY;
+            window.scrollTo({ top: Math.max(0, cardTop - 10), left: 0, behavior: 'smooth' });
+            return;
+          }
+        }
+        window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+      });
     });
   }
 
@@ -539,8 +543,9 @@ export default function App() {
     );
   }
 
-  const displayName = isCloudUser ? getFirstName(authUser) : 'Uttej';
-  const displayInitial = displayName.slice(0, 1).toUpperCase();
+  const displayName = isCloudUser ? getFirstName(authUser) : '';
+  const displayLabel = displayName || 'Your account';
+  const displayInitial = (displayName || authUser?.email || 'U').slice(0, 1).toUpperCase();
   const statusLabel = potdSolved ? 'POTD SOLVED FOR TODAY!' : 'POTD PENDING FOR TODAY';
 
   return (
@@ -549,9 +554,9 @@ export default function App() {
         {isCloudUser ? (
           <div className="auth-user-chip" title={authUser.email || authUser.displayName || 'Signed-in Google account'}>
             <span className="auth-user-avatar">{authUser.photoURL ? <img src={authUser.photoURL} alt="" referrerPolicy="no-referrer" /> : displayInitial}</span>
-            <span className="auth-user-copy"><strong>{displayName}</strong><small className={cloudSyncStatus === 'error' ? 'sync-error-text' : ''}>{cloudSyncStatus === 'synced' ? 'CLOUD SYNCED' : cloudSyncStatus === 'syncing' ? 'SYNCING…' : cloudSyncStatus === 'error' ? 'SYNC ISSUE' : 'GOOGLE ACCOUNT'}</small></span>
+            <span className="auth-user-copy"><strong>{displayLabel}</strong><small className={cloudSyncStatus === 'error' ? 'sync-error-text' : ''}>{cloudSyncStatus === 'synced' ? 'CLOUD SYNCED' : cloudSyncStatus === 'syncing' ? 'SYNCING…' : cloudSyncStatus === 'error' ? 'SYNC ISSUE' : 'GOOGLE ACCOUNT'}</small></span>
             {cloudSyncStatus === 'error' && <button type="button" className="auth-sync-retry" onClick={handleRetryCloudSync} title={authError || 'Retry cloud sync'} aria-label="Retry cloud sync"><RefreshCw size={13} /></button>}
-            <button type="button" className="auth-signout-button" onClick={handleSignOut} title="Sign out" aria-label="Sign out"><LogOut size={15} /></button>
+            <button type="button" className="auth-signout-button" onClick={handleSignOut} title="Sign out" aria-label="Sign out"><LogOut size={17} strokeWidth={2.5} /></button>
           </div>
         ) : (
           <button type="button" className="auth-mini-chip" onClick={openGoogleSignIn} title="Sign in to sync across devices"><Cloud size={15} /><span>Sign in to sync</span></button>
@@ -570,7 +575,7 @@ export default function App() {
         <section className="welcome-row">
           <div className="welcome-copy">
             <div className="welcome-kicker"><span className="kicker-line" /> YOUR DAILY BRAIN GYM <span className="kicker-line" /></div>
-            <h1>{displayName}, solve this question<br className="desktop-break" /> and <span>start your day!</span></h1>
+            <h1>{displayName ? `${displayName}, solve this question` : 'Solve this question'}<br className="desktop-break" /> and <span>start your day!</span></h1>
             <p>One question. A sharper brain. Zero excuses. <span className="sun-scribble">✳</span></p>
           </div>
           <div className={`potd-status ${potdSolved ? 'potd-status-solved' : 'potd-status-pending'}`}>
@@ -612,7 +617,7 @@ export default function App() {
                 <div><p className="eyebrow">YOUR PIXEL PARTNER</p><h2>Brain buddy</h2></div>
                 <span className="companion-level-chip">LVL {petLevel}</span>
               </div>
-              <PixelPet mood={petMood} level={petLevel} messageIndex={petMessageIndex} />
+              <PixelPet mood={petMood} level={petLevel} messageIndex={petMessageIndex} userName={displayName} />
               <div className="companion-level-progress">
                 <div className="companion-progress-copy"><span>COMPANION EVOLUTION</span><strong>{store.stats.totalCorrect % 10}/10 <em>correct</em></strong></div>
                 <div className="companion-progress-track"><span style={{ width: `${(store.stats.totalCorrect % 10) * 10}%` }} /></div>
@@ -639,7 +644,7 @@ export default function App() {
         </div>
 
         <footer className="app-footer">
-          <div className="footer-brand"><span className="footer-dot">✦</span> BUILT FOR THE LONG GAME <span className="footer-divider">/</span> <span>UTEJJ'S ENGINEERING WARM-UP</span></div>
+          <div className="footer-brand"><span className="footer-dot">✦</span> BUILT FOR THE LONG GAME <span className="footer-divider">/</span> <span>DAILYQUEST / ENGINEERING WARM-UP</span></div>
           <div className="footer-right"><span><span className="storage-dot" /> {isCloudUser ? 'Cloud profile active' : 'Local progress on'}</span><strong>{isCloudUser ? (cloudSyncStatus === 'error' ? ' SYNC RETRY NEEDED' : ' YOUR ACCOUNT') : ' THIS DEVICE'}</strong><span className="footer-heart">♥</span></div>
         </footer>
       </main>

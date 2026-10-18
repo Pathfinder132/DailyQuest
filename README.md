@@ -1,4 +1,4 @@
-# Uttej's Daily Engineering Warm-Up ⚡
+# DailyQuest ⚡
 
 A colorful daily practice app for sharpening computer science fundamentals, mental maths, quantitative aptitude, and logical reasoning — one question at a time.
 
