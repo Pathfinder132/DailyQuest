@@ -87,7 +87,7 @@ export function isMathAptitudeQuestion(question) {
   if (!question) return false;
   if (question.source === 'math') return true;
   const tags = Array.isArray(question.tags) ? question.tags.join(' ') : String(question.tags ?? '');
-  const categoryMetadata = [question.category, question.topic, question.subCategory, question.questionType, tags].filter(Boolean).join(' ');
+  const categoryMetadata = [question.bankType, question.category, question.topic, question.subCategory, question.questionType, tags].filter(Boolean).join(' ');
   return MATH_APTITUDE_CATEGORY.test(categoryMetadata);
 }
 
@@ -99,6 +99,21 @@ export function pickMathAptitudeQuestion(questionBank = [], currentQuestionId = 
   const pool = alternatives.length ? alternatives : eligible;
   const value = Math.max(0, Math.min(0.999999999, random()));
   return pool[Math.floor(value * pool.length)] ?? pool[0];
+}
+
+/** A stable track classification used by the bank inventory and future question types. */
+export function getQuestionBankTrack(question) {
+  if (!question || typeof question !== 'object') return 'core';
+  const explicitTypes = [question.bankType, question.questionType, question.type, question.track]
+    .filter(Boolean).map((value) => String(value).trim().toLowerCase());
+  const tagText = Array.isArray(question.tags) ? question.tags.join(' ').toLowerCase() : String(question.tags ?? '').toLowerCase();
+  const categoryValues = [question.category, question.topic, question.subCategory].filter(Boolean).map((value) => String(value).trim().toLowerCase());
+  const explicitProject = explicitTypes.some((value) => /project|capstone|case[ -]?study/.test(value));
+  const taggedProject = /project[ -]?based|capstone|case[ -]?study/.test(tagText);
+  const categoryProject = categoryValues.some((value) => /^(projects?|project[ -]?based|project[ -]?based engineering|case studies|capstone)$/i.test(value) || /project[ -]?based|capstone|case[ -]?study/.test(value));
+  if (explicitProject || taggedProject || categoryProject) return 'project';
+  if (isMathAptitudeQuestion(question)) return 'math';
+  return 'core';
 }
 
 export function normalizeImportedQuestion(input, index = 0) {
@@ -140,6 +155,7 @@ export function normalizeImportedQuestion(input, index = 0) {
     topic: String(input.topic ?? '').trim() || undefined,
     subCategory: String(input.subCategory ?? input.subcategory ?? '').trim() || undefined,
     questionType: String(input.questionType ?? input.type ?? '').trim() || undefined,
+    bankType: String(input.bankType ?? input.track ?? '').trim() || undefined,
     tags: Array.isArray(input.tags) ? input.tags.map((tag) => String(tag).trim()).filter(Boolean) : undefined,
     code: typeof input.code === 'string' ? input.code : undefined,
     source: 'imported',
@@ -153,6 +169,7 @@ function hasSameQuestionContent(existing, incoming) {
       (existing.topic ?? '') !== (incoming.topic ?? '') ||
       (existing.subCategory ?? '') !== (incoming.subCategory ?? '') ||
       (existing.questionType ?? '') !== (incoming.questionType ?? '') ||
+      (existing.bankType ?? '') !== (incoming.bankType ?? '') ||
       JSON.stringify(existing.tags ?? []) !== JSON.stringify(incoming.tags ?? []) ||
       (existing.code ?? '') !== (incoming.code ?? '')) {
     return false;

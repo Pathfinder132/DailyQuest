@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { calculateQuestionReward, ensureLevelingProfile, getLastDisplayedOptionOrder, getLevelInfo, pickQuestionWithActiveRecall, shuffleOptionsForDisplay, xpRequiredForLevel } from '../src/lib/utils.js';
-import { isMathAptitudeQuestion, pickMathAptitudeQuestion, validateQuestionArray } from '../src/lib/questionTools.js';
+import { getQuestionBankTrack, isMathAptitudeQuestion, pickMathAptitudeQuestion, validateQuestionArray } from '../src/lib/questionTools.js';
 import { getLegacyMigrationUid, getUserStorageKey, mergeStores, readStore, setLegacyMigrationUid, storeHasData, writeStore } from '../src/lib/storage.js';
 
 const question = (id) => ({
@@ -40,12 +40,16 @@ const existingProfile = ensureLevelingProfile({
 const legacyLevelInfo = getLevelInfo(existingProfile.stats.xp, existingProfile.stats.leveling);
 assert.equal(legacyLevelInfo.level, 14, 'an existing level 14 profile stays at level 14 after the progression upgrade');
 assert.equal(legacyLevelInfo.progressXp, 50, 'existing partial level progress is retained');
-assert.equal(legacyLevelInfo.requiredXp, 126, 'the level 14 target increases gradually instead of staying at 100');
+assert.equal(legacyLevelInfo.requiredXp, 165, 'the level 14 target increases by 5 XP per level');
 assert.ok(xpRequiredForLevel(15) > xpRequiredForLevel(14), 'each higher level needs more XP than the last');
-assert.equal(getLevelInfo(1476, existingProfile.stats.leveling).level, 15, 'the next level unlocks at the progressive threshold');
+assert.equal(getLevelInfo(1465, existingProfile.stats.leveling).level, 15, 'the next level unlocks after 165 XP from the level 14 anchor');
 const freshProfile = ensureLevelingProfile({ history: [], customQuestions: [], stats: { xp: 0, totalCorrect: 0, activeDays: [], potdCompletedDates: [] } });
 assert.equal(getLevelInfo(100, freshProfile.stats.leveling).level, 2, 'new profiles need 100 XP for level 2');
-assert.equal(getLevelInfo(202, freshProfile.stats.leveling).level, 3, 'level 3 requires 102 more XP, so requirements increase slowly');
+assert.equal(xpRequiredForLevel(1), 100);
+assert.equal(xpRequiredForLevel(2), 105);
+assert.equal(xpRequiredForLevel(3), 110);
+assert.equal(getLevelInfo(204, freshProfile.stats.leveling).level, 2, '204 XP is one XP short of the level 3 threshold');
+assert.equal(getLevelInfo(205, freshProfile.stats.leveling).level, 3, 'level 3 requires 105 XP after the first 100 XP');
 
 const combinedHistory = [...previousWrong, ...previousCorrect];
 const pick = (values) => {
@@ -122,7 +126,12 @@ assert.equal(pickMathAptitudeQuestion([q1, aptitudeQuestion, logicalQuestion], '
 const normalizedWithTags = validateQuestionArray(JSON.stringify([{ ...aptitudeQuestion, tags: ['percentages', 'profit-loss'], topic: 'Profit and Loss' }]), []);
 assert.equal(normalizedWithTags.questions[0].topic, 'Profit and Loss', 'import preserves math topic metadata');
 assert.deepEqual(normalizedWithTags.questions[0].tags, ['percentages', 'profit-loss'], 'import preserves category tags');
-console.log('New feature tests passed: stable-ID option shuffle, guaranteed reorder on recall, math/aptitude bank selection, and topic/tag import.');
+const projectJson = JSON.stringify([{ ...question('project_demo'), category: 'Project-Based Engineering', bankType: 'project', questionType: 'project-based' }]);
+const normalizedProject = validateQuestionArray(projectJson, []).questions[0];
+assert.equal(normalizedProject.bankType, 'project', 'project bank metadata is preserved during import');
+assert.equal(getQuestionBankTrack(normalizedProject), 'project', 'project bank questions are classified separately from core and math');
+assert.equal(getQuestionBankTrack({ ...question('math-bank-demo'), bankType: 'math', category: 'Custom' }), 'math', 'an explicit math bank type is recognized even with a custom category');
+console.log('New feature tests passed: stable-ID option shuffle, active recall, math/aptitude bank selection, topic/tag import, and project-bank metadata.');
 
 
 // Storage merge + account-isolation checks do not require Firebase or a browser.

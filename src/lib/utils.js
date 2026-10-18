@@ -6,10 +6,10 @@ export function localDateKey(date = new Date()) {
 }
 
 
-/** XP needed to move from the current level to the next; rises gently by 2 per level. */
+/** XP needed to move from the current level to the next: 100, 105, 110, 115... */
 export function xpRequiredForLevel(level) {
   const safeLevel = Math.max(1, Math.floor(Number(level) || 1));
-  return 100 + ((safeLevel - 1) * 2);
+  return 100 + ((safeLevel - 1) * 5);
 }
 
 /**

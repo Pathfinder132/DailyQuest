@@ -177,6 +177,14 @@ function makeCloudSnapshot(profileSnapshot, attemptsSnapshot, questionsSnapshot)
   };
 }
 
+/** Read-only connectivity check for the signed-in user's own Firestore profile. */
+export async function checkUserCloudProfile(user) {
+  if (!user?.uid || user.isAnonymous) throw new Error('Sign in with Google before testing cloud access.');
+  const { db } = await getFirebaseClient();
+  const profileSnapshot = await getDoc(doc(db, 'users', user.uid));
+  return { profileExists: profileSnapshot.exists() };
+}
+
 export async function loadUserCloudStore(user) {
   const { db } = await getFirebaseClient();
   const profileRef = doc(db, 'users', user.uid);

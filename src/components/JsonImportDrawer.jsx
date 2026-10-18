@@ -20,6 +20,27 @@ const EXAMPLE = `[
   }
 ]`;
 
+const PROJECT_BASED_EXAMPLE = `[
+  {
+    "id": "project_api_design_001",
+    "bankType": "project",
+    "questionType": "project-based",
+    "category": "Project-Based Engineering",
+    "topic": "API Design",
+    "difficulty": "Scenario",
+    "question": "Your team is building a task-tracking API. Which choice is best for preventing one user from reading another user's tasks?",
+    "options": [
+      { "id": "A", "text": "Hide task IDs in the frontend" },
+      { "id": "B", "text": "Check ownership/authorization on the server for every request" },
+      { "id": "C", "text": "Use a longer URL" },
+      { "id": "D", "text": "Store all tasks in localStorage" }
+    ],
+    "correctAnswer": "B",
+    "solution": "The server must enforce authorization for every request. Frontend checks and unguessable IDs are not substitutes for access control.",
+    "takeaway": "Use bankType = project for project scenarios; IDs and history remain stable across imports."
+  }
+]`;
+
 const MATH_APTITUDE_EXAMPLE = `[
   {
     "id": "aptitude_profit_001",
@@ -131,6 +152,10 @@ export default function JsonImportDrawer({ open, onClose, existingQuestions = []
     setRaw(MATH_APTITUDE_EXAMPLE); setError(''); setSuccess(''); setPreview(null); setAlreadyImportedCount(0); setInputCount(0);
   }
 
+  function loadProjectExample() {
+    setRaw(PROJECT_BASED_EXAMPLE); setError(''); setSuccess(''); setPreview(null); setAlreadyImportedCount(0); setInputCount(0);
+  }
+
   return (
     <div className="drawer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <aside className="import-drawer" role="dialog" aria-modal="true" aria-labelledby="import-title">
@@ -156,6 +181,14 @@ export default function JsonImportDrawer({ open, onClose, existingQuestions = []
             <p>Use categories such as <code>Math</code>, <code>Quantitative Aptitude</code>, <code>Logical Reasoning</code>, <code>Word Problems</code>, or <code>Data Interpretation</code>. These are picked by <b>Generate Math</b> after import.</p>
           </div>
           <button type="button" className="secondary-button" onClick={loadMathExamples}>Load 4 math examples</button>
+        </div>
+
+        <div className="project-import-note">
+          <div>
+            <strong>Project-based question bank</strong>
+            <p>For case studies, architecture trade-offs, debugging scenarios, or project decisions, add <code>"bankType": "project"</code>. The dashboard will count these separately from Core and Math.</p>
+          </div>
+          <button type="button" className="secondary-button" onClick={loadProjectExample}>Load project example</button>
         </div>
 
         <div className="editor-topline">

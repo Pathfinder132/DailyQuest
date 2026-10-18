@@ -1,8 +1,9 @@
 import React from 'react';
 import { Activity, BookOpen, CalendarCheck, CheckCircle2, Cloud, Download, Flame, History, Sparkles, Target, Upload } from 'lucide-react';
 import { formatDateTime, getLevelInfo, localDateKey } from '../lib/utils.js';
+import QuestionBankDiagnostics from './QuestionBankDiagnostics.jsx';
 
-export default function StatsPanel({ store, streak, level, petLevel, onOpenImport, onExport, syncMode = 'local' }) {
+export default function StatsPanel({ store, streak, level, petLevel, onOpenImport, onExport, syncMode = 'local', questions = [], builtInQuestions = [], authStatus = 'unknown', firebaseConfigured = false, cloudSyncStatus = 'local', onTestCloud }) {
   const levelProgress = getLevelInfo(store.stats.xp, store.stats.leveling);
   const history = [...store.history].reverse();
   const correct = store.history.filter((attempt) => attempt.isCorrect).length;
@@ -62,6 +63,17 @@ export default function StatsPanel({ store, streak, level, petLevel, onOpenImpor
         </div>
         <div className={`storage-note ${syncMode === 'cloud' ? 'storage-note-cloud' : ''}`}><span className="storage-dot" /><span>{syncMode === 'cloud' ? 'Your profile syncs across devices' : 'Saved locally on this device'}</span>{syncMode === 'cloud' ? <CheckCircle2 size={13} /> : <Cloud size={13} />}</div>
       </section>
+
+      <QuestionBankDiagnostics
+        questions={questions}
+        builtInQuestions={builtInQuestions}
+        customQuestions={store.customQuestions}
+        store={store}
+        authStatus={authStatus}
+        cloudSyncStatus={cloudSyncStatus}
+        firebaseConfigured={firebaseConfigured}
+        onTestCloud={onTestCloud}
+      />
     </aside>
   );
 }

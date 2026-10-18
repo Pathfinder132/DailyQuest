@@ -11,7 +11,7 @@ import { EMPTY_STORE, exportProgress, getLegacyMigrationUid, getUserStorageKey, 
 import { isMathAptitudeQuestion, makeMentalMathQuestion, pickMathAptitudeQuestion } from './lib/questionTools.js';
 import { calculateStreak, ensureLevelingProfile, getDailyQuestion, getLastDisplayedOptionOrder, getLevelInfo, localDateKey, makeId, pickQuestionWithActiveRecall, calculateQuestionReward, shuffleOptionsForDisplay } from './lib/utils.js';
 import { playUiSound } from './lib/sounds.js';
-import { isFirebaseConfigured, saveUserStoreToCloud, signInWithGoogle, signOutCurrentUser, subscribeToAuthChanges, subscribeToUserCloudStore, syncAttemptToFirestore, syncQuestionsToFirestore } from './lib/firebaseSync.js';
+import { isFirebaseConfigured, saveUserStoreToCloud, signInWithGoogle, signOutCurrentUser, subscribeToAuthChanges, subscribeToUserCloudStore, syncAttemptToFirestore, syncQuestionsToFirestore, checkUserCloudProfile } from './lib/firebaseSync.js';
 
 function popConfetti() {
   confetti({ particleCount: 95, spread: 74, origin: { y: 0.63 }, startVelocity: 34, scalar: 0.9, ticks: 170 });
@@ -519,6 +519,11 @@ export default function App() {
     setToast('Progress export downloaded as JSON.');
   }
 
+  async function handleDiagnosticCloudCheck() {
+    if (!isCloudUser || !authUser) throw new Error('Sign in with Google to check this account cloud profile.');
+    return checkUserCloudProfile(authUser);
+  }
+
   async function handleGoogleSignIn() {
     setAuthError('');
     setSignInBusy(true);
@@ -682,6 +687,12 @@ export default function App() {
           onOpenImport={() => setShowImport(true)}
           onExport={handleExport}
           syncMode={isCloudUser ? 'cloud' : 'local'}
+          questions={allQuestions}
+          builtInQuestions={DEFAULT_QUESTIONS}
+          authStatus={authStatus}
+          firebaseConfigured={isFirebaseConfigured()}
+          cloudSyncStatus={cloudSyncStatus}
+          onTestCloud={isCloudUser ? handleDiagnosticCloudCheck : null}
         />
 
         <div className="bottom-banner">

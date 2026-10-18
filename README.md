@@ -10,7 +10,8 @@ Meet your pixel companion, solve a quick challenge, review the explanation, and 
 - **Math & aptitude practice:** Generate quick calculations or import your own question bank.
 - **Active recall:** Previously seen questions may return, with extra attention to questions you missed.
 - **Game-like feedback:** Earn XP, build streaks, level up your pixel companion, and enjoy sound and confetti effects.
-- **Personal question banks:** Import questions from JSON and export your progress.
+- **Personal question banks:** Import JSON banks, review counts by Core, Math & Aptitude, and Project-Based tracks, and export your progress.
+- **Troubleshooting toolkit:** Run safe checks for question IDs, saved history, browser storage, audio support, authentication, and cloud access; download a privacy-conscious diagnostic report.
 - **Google sign-in:** Keep your profile, question history, progress, and imported questions synced with Firebase across devices.
 - **Responsive design:** Use the app on desktop, tablet, or mobile.
 
@@ -42,7 +43,7 @@ Without Firebase configuration, you can use the app in local-only mode. Never co
 
 Use **Import Questions** in the app to paste a JSON array. Every question needs a unique `id`, a `category`, a `question`, four `options`, and a `correctAnswer`. A `solution` is recommended so you can review the reasoning after answering.
 
-The same importer supports computer science, quantitative aptitude, logical reasoning, word problems, and other categories. The **Generate Math** action uses matching questions from your imported bank when available.
+The same importer supports computer science, quantitative aptitude, logical reasoning, word problems, and project scenarios. Add `"bankType": "project"` to classify project-based questions separately. The **Generate Math** action uses matching questions from your imported bank when available.
 
 ## Useful Commands
 
