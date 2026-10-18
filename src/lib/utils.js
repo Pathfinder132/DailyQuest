@@ -5,6 +5,66 @@ export function localDateKey(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
+
+/** XP needed to move from the current level to the next; rises gently by 2 per level. */
+export function xpRequiredForLevel(level) {
+  const safeLevel = Math.max(1, Math.floor(Number(level) || 1));
+  return 100 + ((safeLevel - 1) * 2);
+}
+
+/**
+ * Keep existing players' current level and partial progress on upgrade, then use the
+ * gently increasing XP curve for future levels. New profiles start at level 1 / 0 XP.
+ */
+export function ensureLevelingProfile(store) {
+  const stats = store?.stats || {};
+  const existing = stats.leveling;
+  const validExisting = existing && Number.isFinite(existing.baseXp) && existing.baseXp >= 0
+    && Number.isFinite(existing.baseLevel) && existing.baseLevel >= 1;
+  if (validExisting) return store;
+
+  const xp = Math.max(0, Math.floor(Number(stats.xp) || 0));
+  const legacyLevel = Math.floor(xp / 100) + 1;
+  const levelStartXp = Math.floor(xp / 100) * 100;
+  return {
+    ...store,
+    stats: {
+      ...stats,
+      leveling: { baseXp: levelStartXp, baseLevel: legacyLevel, version: 1 },
+    },
+  };
+}
+
+/** Return current level and progress, using the per-profile anchor for backward compatibility. */
+export function getLevelInfo(totalXp = 0, leveling = null) {
+  const xp = Math.max(0, Math.floor(Number(totalXp) || 0));
+  const validProfile = leveling && Number.isFinite(leveling.baseXp) && leveling.baseXp >= 0
+    && Number.isFinite(leveling.baseLevel) && leveling.baseLevel >= 1;
+  const baseXp = validProfile ? Math.floor(leveling.baseXp) : Math.floor(xp / 100) * 100;
+  const baseLevel = validProfile ? Math.max(1, Math.floor(leveling.baseLevel)) : Math.floor(xp / 100) + 1;
+  let level = baseLevel;
+  let remainingXp = Math.max(0, xp - baseXp);
+  let requiredXp = xpRequiredForLevel(level);
+  let guard = 0;
+
+  while (remainingXp >= requiredXp && guard < 10000) {
+    remainingXp -= requiredXp;
+    level += 1;
+    requiredXp = xpRequiredForLevel(level);
+    guard += 1;
+  }
+
+  const progressXp = Math.min(requiredXp, Math.max(0, Math.floor(remainingXp)));
+  return {
+    level,
+    progressXp,
+    requiredXp,
+    progressPercent: Math.min(100, (progressXp / requiredXp) * 100),
+    baseXp,
+    baseLevel,
+  };
+}
+
 export function getDailyQuestion(questions, dateKey = localDateKey()) {
   if (!questions.length) return null;
   // A stable date hash keeps the day's POTD consistent between refreshes.

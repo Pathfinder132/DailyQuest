@@ -1,8 +1,9 @@
 import React from 'react';
 import { Activity, BookOpen, CalendarCheck, CheckCircle2, Cloud, Download, Flame, History, Sparkles, Target, Upload } from 'lucide-react';
-import { formatDateTime, localDateKey } from '../lib/utils.js';
+import { formatDateTime, getLevelInfo, localDateKey } from '../lib/utils.js';
 
 export default function StatsPanel({ store, streak, level, petLevel, onOpenImport, onExport, syncMode = 'local' }) {
+  const levelProgress = getLevelInfo(store.stats.xp, store.stats.leveling);
   const history = [...store.history].reverse();
   const correct = store.history.filter((attempt) => attempt.isCorrect).length;
   const attempts = store.history.length;
@@ -21,8 +22,8 @@ export default function StatsPanel({ store, streak, level, petLevel, onOpenImpor
       <section className="side-card xp-card">
         <div className="side-card-top"><span className="side-icon xp-icon"><Sparkles size={17} /></span><span className="tiny-kicker">YOUR PLAYER CARD</span><span className="level-chip">LVL {level}</span></div>
         <div className="xp-total"><strong>{store.stats.xp.toLocaleString()}</strong><span>XP</span></div>
-        <div className="xp-progress-head"><span>Progress to Level {level + 1}</span><strong>{store.stats.xp % 100}/100 XP</strong></div>
-        <div className="xp-track"><span style={{ width: `${store.stats.xp % 100}%` }} /></div>
+        <div className="xp-progress-head"><span>Progress to Level {levelProgress.level + 1}</span><strong>{levelProgress.progressXp}/{levelProgress.requiredXp} XP</strong></div>
+        <div className="xp-track"><span style={{ width: `${levelProgress.progressPercent}%` }} /></div>
         <div className="pet-level-row"><span>Companion level</span><strong><span className="tiny-pixel">✦</span> {petLevel}</strong><span className="pet-level-hint">+1 every 10 correct</span></div>
       </section>
 

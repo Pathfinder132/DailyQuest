@@ -141,6 +141,9 @@ function normalizedStats(profile = {}) {
       totalCorrect: Number(profile.stats.totalCorrect || 0),
       activeDays: Array.isArray(profile.stats.activeDays) ? profile.stats.activeDays : [],
       potdCompletedDates: Array.isArray(profile.stats.potdCompletedDates) ? profile.stats.potdCompletedDates : [],
+      ...(profile.stats.leveling && Number.isFinite(profile.stats.leveling.baseXp) && Number.isFinite(profile.stats.leveling.baseLevel)
+        ? { leveling: { baseXp: profile.stats.leveling.baseXp, baseLevel: profile.stats.leveling.baseLevel, version: profile.stats.leveling.version || 1 } }
+        : {}),
     };
   }
   // Read the old anonymous-sync profile format during the migration window.
@@ -149,6 +152,9 @@ function normalizedStats(profile = {}) {
     totalCorrect: Number(profile.totalCorrect || 0),
     activeDays: Array.isArray(profile.activeDays) ? profile.activeDays : [],
     potdCompletedDates: Array.isArray(profile.potdCompletedDates) ? profile.potdCompletedDates : [],
+    ...(profile.leveling && Number.isFinite(profile.leveling.baseXp) && Number.isFinite(profile.leveling.baseLevel)
+      ? { leveling: { baseXp: profile.leveling.baseXp, baseLevel: profile.leveling.baseLevel, version: profile.leveling.version || 1 } }
+      : {}),
   };
 }
 

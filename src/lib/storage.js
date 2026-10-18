@@ -38,6 +38,9 @@ export function readStore(storageKey = STORAGE_KEY) {
         totalCorrect: Number.isFinite(parsed.stats?.totalCorrect) ? parsed.stats.totalCorrect : 0,
         activeDays: Array.isArray(parsed.stats?.activeDays) ? parsed.stats.activeDays : [],
         potdCompletedDates: Array.isArray(parsed.stats?.potdCompletedDates) ? parsed.stats.potdCompletedDates : [],
+        ...(parsed.stats?.leveling && Number.isFinite(parsed.stats.leveling.baseXp) && Number.isFinite(parsed.stats.leveling.baseLevel)
+          ? { leveling: { baseXp: parsed.stats.leveling.baseXp, baseLevel: parsed.stats.leveling.baseLevel, version: parsed.stats.leveling.version || 1 } }
+          : {}),
       },
     };
   } catch (error) {
@@ -136,6 +139,10 @@ export function mergeStores(...inputStores) {
 
   const xp = Math.max(historyXp, ...allStats.map((stats) => Number(stats.xp || 0)), 0);
   const totalCorrect = Math.max(correctCount, ...allStats.map((stats) => Number(stats.totalCorrect || 0)), 0);
+  const leveling = [...allStats].reverse().map((stats) => stats.leveling).find((profile) => (
+    profile && Number.isFinite(profile.baseXp) && profile.baseXp >= 0
+    && Number.isFinite(profile.baseLevel) && profile.baseLevel >= 1
+  ));
   return {
     history,
     customQuestions,
@@ -144,6 +151,7 @@ export function mergeStores(...inputStores) {
       totalCorrect,
       activeDays: [...activeDays].sort(),
       potdCompletedDates: [...potdCompletedDates].sort(),
+      ...(leveling ? { leveling: { baseXp: leveling.baseXp, baseLevel: leveling.baseLevel, version: leveling.version || 1 } } : {}),
     },
   };
 }

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { calculateQuestionReward, getLastDisplayedOptionOrder, pickQuestionWithActiveRecall, shuffleOptionsForDisplay } from '../src/lib/utils.js';
+import { calculateQuestionReward, ensureLevelingProfile, getLastDisplayedOptionOrder, getLevelInfo, pickQuestionWithActiveRecall, shuffleOptionsForDisplay, xpRequiredForLevel } from '../src/lib/utils.js';
 import { isMathAptitudeQuestion, pickMathAptitudeQuestion, validateQuestionArray } from '../src/lib/questionTools.js';
 import { getLegacyMigrationUid, getUserStorageKey, mergeStores, readStore, setLegacyMigrationUid, storeHasData, writeStore } from '../src/lib/storage.js';
 
@@ -30,6 +30,22 @@ assert.deepEqual(calculateQuestionReward('q2', previousCorrect, true), {
   xpEarned: 5, wasPreviouslyAttempted: true, isRepeatSolve: true,
 });
 assert.equal(calculateQuestionReward('q2', previousCorrect, false).xpEarned, 5);
+
+// Progressive leveling preserves a returning user's current legacy level/progress,
+// then gradually increases the XP target for each subsequent level.
+const existingProfile = ensureLevelingProfile({
+  history: [], customQuestions: [],
+  stats: { xp: 1350, totalCorrect: 95, activeDays: [], potdCompletedDates: [] },
+});
+const legacyLevelInfo = getLevelInfo(existingProfile.stats.xp, existingProfile.stats.leveling);
+assert.equal(legacyLevelInfo.level, 14, 'an existing level 14 profile stays at level 14 after the progression upgrade');
+assert.equal(legacyLevelInfo.progressXp, 50, 'existing partial level progress is retained');
+assert.equal(legacyLevelInfo.requiredXp, 126, 'the level 14 target increases gradually instead of staying at 100');
+assert.ok(xpRequiredForLevel(15) > xpRequiredForLevel(14), 'each higher level needs more XP than the last');
+assert.equal(getLevelInfo(1476, existingProfile.stats.leveling).level, 15, 'the next level unlocks at the progressive threshold');
+const freshProfile = ensureLevelingProfile({ history: [], customQuestions: [], stats: { xp: 0, totalCorrect: 0, activeDays: [], potdCompletedDates: [] } });
+assert.equal(getLevelInfo(100, freshProfile.stats.leveling).level, 2, 'new profiles need 100 XP for level 2');
+assert.equal(getLevelInfo(202, freshProfile.stats.leveling).level, 3, 'level 3 requires 102 more XP, so requirements increase slowly');
 
 const combinedHistory = [...previousWrong, ...previousCorrect];
 const pick = (values) => {
@@ -128,6 +144,10 @@ const legacyStore = {
   stats: { xp: 25, totalCorrect: 1, activeDays: ['2026-10-17'], potdCompletedDates: [] },
 };
 assert.equal(writeStore(legacyStore), true);
+const progressionCacheKey = getUserStorageKey('google-user-level-profile');
+const profileWithLeveling = { ...legacyStore, stats: { ...legacyStore.stats, leveling: { baseXp: 0, baseLevel: 1, version: 1 } } };
+assert.equal(writeStore(profileWithLeveling, progressionCacheKey), true);
+assert.deepEqual(readStore(progressionCacheKey).stats.leveling, profileWithLeveling.stats.leveling, 'local reads preserve the progressive-level anchor');
 setLegacyMigrationUid('google-user-a');
 assert.equal(getLegacyMigrationUid(), 'google-user-a', 'the first Google account claims the legacy cache');
 assert.equal(storeHasData(readStore()), false, 'shared guest cache is cleared after a recoverable backup is made');
@@ -138,6 +158,12 @@ const mergedCustom = mergeStores(
   { ...legacyStore, customQuestions: [{ id: 'custom-1', question: 'new version', _warmupUpdatedAt: 20 }] },
 );
 assert.equal(mergedCustom.customQuestions[0].question, 'new version', 'newer edits to imported questions win cache merges');
+
+const anchoredMerge = mergeStores(
+  { history: [], customQuestions: [], stats: { xp: 1350, totalCorrect: 10, activeDays: [], potdCompletedDates: [], leveling: { baseXp: 1300, baseLevel: 14, version: 1 } } },
+  { history: [], customQuestions: [], stats: { xp: 1350, totalCorrect: 10, activeDays: [], potdCompletedDates: [] } },
+);
+assert.deepEqual(anchoredMerge.stats.leveling, { baseXp: 1300, baseLevel: 14, version: 1 }, 'profile merge preserves level progression metadata');
 assert.equal(mergeStores(legacyStore, { history: [{ ...legacyStore.history[0], id: 'attempt-2', timestamp: 20, xpEarned: 5 }], customQuestions: [], stats: { xp: 30, totalCorrect: 2, activeDays: [], potdCompletedDates: [] } }).stats.xp, 30, 'merging keeps XP consistent with attempts and saved stats');
 if (existingWindow === undefined) delete globalThis.window;
 else globalThis.window = existingWindow;

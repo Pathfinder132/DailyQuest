@@ -9,13 +9,31 @@ import JsonImportDrawer from './components/JsonImportDrawer.jsx';
 import AuthScreen from './components/AuthScreen.jsx';
 import { EMPTY_STORE, exportProgress, getLegacyMigrationUid, getUserStorageKey, mergeStores, readStore, setLegacyMigrationUid, writeStore } from './lib/storage.js';
 import { isMathAptitudeQuestion, makeMentalMathQuestion, pickMathAptitudeQuestion } from './lib/questionTools.js';
-import { calculateStreak, getDailyQuestion, getLastDisplayedOptionOrder, localDateKey, makeId, pickQuestionWithActiveRecall, calculateQuestionReward, shuffleOptionsForDisplay } from './lib/utils.js';
+import { calculateStreak, ensureLevelingProfile, getDailyQuestion, getLastDisplayedOptionOrder, getLevelInfo, localDateKey, makeId, pickQuestionWithActiveRecall, calculateQuestionReward, shuffleOptionsForDisplay } from './lib/utils.js';
 import { playUiSound } from './lib/sounds.js';
 import { isFirebaseConfigured, saveUserStoreToCloud, signInWithGoogle, signOutCurrentUser, subscribeToAuthChanges, subscribeToUserCloudStore, syncAttemptToFirestore, syncQuestionsToFirestore } from './lib/firebaseSync.js';
 
 function popConfetti() {
   confetti({ particleCount: 95, spread: 74, origin: { y: 0.63 }, startVelocity: 34, scalar: 0.9, ticks: 170 });
   window.setTimeout(() => confetti({ particleCount: 38, spread: 95, origin: { y: 0.53 }, startVelocity: 22, scalar: 0.75, ticks: 130 }), 160);
+}
+
+function popLevelUpConfetti(events) {
+  const playerLevelUp = events.some((event) => event.kind === 'player');
+  const petLevelUp = events.some((event) => event.kind === 'pet');
+  if (playerLevelUp) {
+    confetti({
+      particleCount: 150, spread: 105, origin: { y: 0.4 }, startVelocity: 42,
+      scalar: 1.05, ticks: 220, colors: ['#6b35f4', '#f9f35a', '#38e5d1', '#ff6678', '#ffffff'],
+    });
+  }
+  if (petLevelUp) {
+    window.setTimeout(() => confetti({
+      particleCount: playerLevelUp ? 70 : 105, spread: 66, origin: { x: 0.78, y: 0.48 },
+      startVelocity: 31, scalar: 0.95, ticks: 190, shapes: ['square', 'circle'],
+      colors: ['#6b35f4', '#38e5d1', '#f9f35a', '#ffffff'],
+    }), playerLevelUp ? 220 : 0);
+  }
 }
 
 function getTodayAttempt(store, questionId) {
@@ -60,7 +78,7 @@ function friendlyFirebaseError(error) {
 }
 
 export default function App() {
-  const [store, setStore] = useState(() => readStore());
+  const [store, setStore] = useState(() => ensureLevelingProfile(readStore()));
   const [authStatus, setAuthStatus] = useState(() => isFirebaseConfigured() ? 'checking' : 'unconfigured');
   const [authUser, setAuthUser] = useState(null);
   const [authError, setAuthError] = useState('');
@@ -106,6 +124,7 @@ export default function App() {
   const [randomizing, setRandomizing] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [toast, setToast] = useState('');
+  const [levelUpCelebrations, setLevelUpCelebrations] = useState([]);
 
   const allQuestions = useMemo(() => [...DEFAULT_QUESTIONS, ...store.customQuestions], [store.customQuestions]);
   const displayQuestion = useMemo(() => currentQuestion ? { ...currentQuestion, options: displayedOptions } : currentQuestion, [currentQuestion, displayedOptions]);
@@ -115,7 +134,8 @@ export default function App() {
   const isPotd = currentQuestion?.id === dailyQuestion?.id;
   const potdSolved = store.stats.potdCompletedDates.includes(todayKey);
   const streak = calculateStreak(store.stats.activeDays, new Date());
-  const level = Math.floor(store.stats.xp / 100) + 1;
+  const levelInfo = getLevelInfo(store.stats.xp, store.stats.leveling);
+  const level = levelInfo.level;
   const petLevel = Math.floor(store.stats.totalCorrect / 10) + 1;
 
   function restoreQuestionForProfile(profileStore) {
@@ -197,7 +217,7 @@ export default function App() {
         const legacyStore = canClaimLegacy ? readStore() : EMPTY_STORE;
         // Cloud state is merged with the per-account cache and the old local-only profile.
         // Attempts are deduplicated by ID; question edits use their update timestamp.
-        const merged = mergeStores(legacyStore, cloud.store, localCache);
+        const merged = ensureLevelingProfile(mergeStores(legacyStore, cloud.store, localCache));
         setStore(merged);
         restoreQuestionForProfile(merged);
         writeStore(merged, userKey);
@@ -297,6 +317,12 @@ export default function App() {
     return () => window.clearTimeout(handle);
   }, [toast]);
 
+  useEffect(() => {
+    if (!levelUpCelebrations.length) return undefined;
+    const timeout = window.setTimeout(() => setLevelUpCelebrations([]), 3600);
+    return () => window.clearTimeout(timeout);
+  }, [levelUpCelebrations]);
+
   function handleAnswer(optionId) {
     if (!currentQuestion || currentAnswer) return;
     const chosen = currentQuestion.options.find((option) => option.id === optionId);
@@ -334,6 +360,8 @@ export default function App() {
     setPetMood(correct ? 'happy' : 'dizzy');
     setPetMessageIndex(Math.floor(Math.random() * 3));
 
+    const previousPlayerLevel = getLevelInfo(store.stats.xp, store.stats.leveling).level;
+    const previousPetLevel = Math.floor(store.stats.totalCorrect / 10) + 1;
     const stats = {
       ...store.stats,
       xp: store.stats.xp + xpEarned,
@@ -341,6 +369,15 @@ export default function App() {
       activeDays: correct ? [...new Set([...store.stats.activeDays, dateKey])] : store.stats.activeDays,
       potdCompletedDates: correct && isPotd ? [...new Set([...store.stats.potdCompletedDates, dateKey])] : store.stats.potdCompletedDates,
     };
+    const nextPlayerLevel = getLevelInfo(stats.xp, stats.leveling).level;
+    const nextPetLevel = Math.floor(stats.totalCorrect / 10) + 1;
+    const levelUpEvents = [];
+    if (nextPetLevel > previousPetLevel) {
+      levelUpEvents.push({ id: makeId('levelup'), kind: 'pet', level: nextPetLevel, emoji: '🐣✨', title: 'BRAIN BUDDY EVOLVED!', detail: `Your companion reached Level ${nextPetLevel}. Keep the good reps coming!` });
+    }
+    if (nextPlayerLevel > previousPlayerLevel) {
+      levelUpEvents.push({ id: makeId('levelup'), kind: 'player', level: nextPlayerLevel, emoji: '🎉🚀', title: 'PLAYER LEVEL UP!', detail: `Level ${nextPlayerLevel} unlocked. Your next level takes a little more XP.` });
+    }
     const nextStore = { ...store, history: [...store.history, attempt], stats };
     setStore(nextStore);
     if (isCloudUser && authUser) {
@@ -359,10 +396,20 @@ export default function App() {
       popConfetti();
       if (isRepeatSolve) setToast('Active recall win! +5 XP for solving a question you have seen before.');
       else if (isPotd) setToast(`POTD cleared! +${xpEarned} XP. Your daily brain reps are in the bank.`);
-      else setToast('Correct answer! +25 XP secured. First-time solves get the full reward.');
+      else setToast(`Correct answer! +${xpEarned} XP secured.`);
     } else {
       playUiSound('wrong');
       setToast('Good practice. Read the breakdown, then keep going. +5 practice XP.');
+    }
+
+    if (levelUpEvents.length) {
+      const petUpgrade = levelUpEvents.some((event) => event.kind === 'pet');
+      const playerUpgrade = levelUpEvents.some((event) => event.kind === 'player');
+      setLevelUpCelebrations(levelUpEvents);
+      popLevelUpConfetti(levelUpEvents);
+      if (petUpgrade) playUiSound('petLevelUp', { delaySeconds: 0.55 });
+      if (playerUpgrade) playUiSound('playerLevelUp', { delaySeconds: petUpgrade ? 1.65 : 0.55 });
+      setToast(levelUpEvents.map((event) => `${event.emoji} ${event.title} Level ${event.level}!`).join('  '));
     }
   }
 
@@ -488,7 +535,7 @@ export default function App() {
     setAuthError('');
     setAuthUser(null);
     setCloudSyncStatus('local');
-    const localStore = readStore();
+    const localStore = ensureLevelingProfile(readStore());
     setStore(localStore);
     restoreQuestionForProfile(localStore);
     setAuthStatus('guest');
@@ -650,6 +697,16 @@ export default function App() {
       </main>
 
       <JsonImportDrawer open={showImport} onClose={() => setShowImport(false)} existingQuestions={allQuestions} onImport={handleImport} />
+      {levelUpCelebrations.length > 0 && (
+        <div className="level-up-celebration-layer" aria-live="polite" aria-atomic="true">
+          {levelUpCelebrations.map((event) => (
+            <div className={`level-up-banner level-up-${event.kind}`} key={event.id}>
+              <span className="level-up-emoji" aria-hidden="true">{event.emoji}</span>
+              <span className="level-up-copy"><strong>{event.title}</strong><small>{event.detail}</small><b>LVL {event.level}</b></span>
+            </div>
+          ))}
+        </div>
+      )}
       {toast && <div className="toast-message" role="status"><span className="toast-sparkle">✦</span>{toast}<button type="button" aria-label="Dismiss notification" onClick={() => setToast('')}>×</button></div>}
     </div>
   );
