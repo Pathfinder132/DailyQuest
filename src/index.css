@@ -1349,30 +1349,6 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #15b8d2; outli
 }
 
 
-/* Desktop density tune: make the 100% browser view feel as composed as the previous 90% view. */
-@media (min-width: 1500px) and (max-width: 1800px) and (min-height: 700px) {
-  .app-main { padding-top: 18px; padding-left: 32px; padding-right: 32px; }
-  .welcome-row { gap: 22px; margin-bottom: 10px; }
-  .welcome-copy h1 { font-size: clamp(34px, 2.7vw, 45px); line-height: 1.08; }
-  .welcome-copy > p { margin-top: 10px; font-size: 14px; }
-  .potd-status { margin-top: 34px; min-width: 310px; max-width: 370px; padding: 14px 18px; }
-  .dashboard-grid { gap: 20px; }
-  .question-section-heading { margin-bottom: 11px; }
-  .question-card { min-height: 490px; padding: 25px 28px 18px; }
-  .question-prompt { margin: 22px 0 21px; font-size: clamp(27px, 2.05vw, 34px); line-height: 1.3; }
-  .answer-grid { gap: 12px; }
-  .answer-option { min-height: 78px; padding: 13px 15px; }
-  .question-actions { margin-top: 18px; }
-  .companion-panel { min-height: 540px; padding: 20px 18px 16px; }
-  .companion-panel .pet-speech { min-height: 82px; padding: 15px; }
-  .companion-panel .pet-speech p { font-size: 16px; }
-  .companion-panel .pet-avatar-wrap { height: 210px; }
-  .companion-panel .pet-pixels { grid-template-columns: repeat(12, 14px); grid-auto-rows: 14px; }
-  .companion-panel .pet-pixel { width: 14px; height: 14px; }
-  .companion-level-progress { padding: 13px; }
-  .companion-level-progress > p { font-size: 11px; }
-}
-
 /* Move the mobile Google sign-in card up by tightening the artwork and intro stack. */
 @media (max-width: 600px) {
   .auth-shell { padding-top: 10px; padding-bottom: 12px; }
@@ -1542,58 +1518,6 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #15b8d2; outli
 .qbd-safety-note { display: flex; align-items: flex-start; gap: 6px; margin: 12px 0 0; color: #4e665d; font-size: 10px; line-height: 1.5; }
 .qbd-safety-note svg { flex: 0 0 auto; margin-top: 1px; color: #16875b; }
 
-/* Desktop density refinement: approximate the denser 90%-zoom composition at normal zoom
-   by tightening actual component dimensions (never browser zoom or a root transform). */
-@media (min-width: 1500px) and (max-width: 1800px) and (min-height: 700px) {
-  .app-main { padding-top: 14px !important; padding-left: 30px; padding-right: 30px; }
-  .welcome-row { gap: 20px; margin-bottom: 12px; }
-  .welcome-copy { padding-top: 0; }
-  .welcome-kicker { margin-bottom: 7px; font-size: 10px; }
-  .welcome-copy h1 { font-size: clamp(31px, 2.65vw, 45px); line-height: 1.06; }
-  .welcome-copy > p { margin-top: 9px; font-size: 13px; }
-  .potd-status { min-width: 290px; max-width: 350px; margin-top: 27px !important; padding: 12px 15px 12px 13px; gap: 11px; border-radius: 15px; }
-  .status-burst { width: 40px; height: 40px; border-radius: 12px; font-size: 21px; }
-  .status-copy > span { font-size: 9px; }
-  .status-copy strong { font-size: 12px; }
-  .status-copy small { font-size: 10px; }
-  .dashboard-grid { grid-template-columns: minmax(0, 1fr) minmax(315px, .36fr); gap: 20px; }
-  .question-section-heading { margin-bottom: 10px; }
-  .question-section-heading h2 { font-size: 21px; }
-  .question-card { min-height: 0; padding: 24px 27px 19px; }
-  .category-tag, .difficulty-tag, .potd-tag, .math-tag { min-height: 28px; padding: 6px 9px; font-size: 11px; }
-  .question-prompt { margin: 20px 0 19px; font-size: clamp(25px, 1.95vw, 33px); line-height: 1.3; }
-  .question-code { font-size: 13px; }
-  .answer-grid { gap: 11px; }
-  .answer-option { min-height: 75px; padding: 12px 14px; gap: 12px; }
-  .answer-letter { width: 38px; height: 38px; font-size: 13px; }
-  .answer-copy { font-size: 14px; line-height: 1.4; }
-  .answer-feedback { margin-top: 16px; padding: 12px 14px; }
-  .solution-card { margin-top: 16px; padding: 18px 19px; }
-  .solution-heading h3 { font-size: 18px; }
-  .solution-copy { font-size: 14px; line-height: 1.65; }
-  .takeaway-box p { font-size: 12px; }
-  .question-actions { margin-top: 18px; }
-  .lock-note { font-size: 11px; }
-  .math-generate-button, .text-button { font-size: 11px; padding: 10px 11px; }
-  .randomize-button { padding: 11px 14px; font-size: 12px; }
-  .companion-panel { min-height: 515px; padding: 18px 17px 15px; }
-  .companion-panel-top h2 { font-size: 17px; }
-  .companion-star { width: 38px; height: 38px; }
-  .companion-panel .pet-card { gap: 10px; margin: 17px 0 13px; }
-  .companion-panel .pet-speech { min-height: 82px; padding: 13px 15px; gap: 9px; }
-  .companion-panel .pet-speech p { font-size: 16px; line-height: 1.35; }
-  .companion-panel .pet-avatar-wrap { height: 218px; }
-  .companion-panel .pet-pixels { grid-template-columns: repeat(12, 13px); grid-auto-rows: 13px; }
-  .companion-panel .pet-pixel { width: 13px; height: 13px; }
-  .companion-panel .pet-level { padding: 6px 9px; font-size: 10px; }
-  .companion-level-progress { padding: 12px; }
-  .companion-progress-copy span { font-size: 9px; }
-  .companion-level-progress > p { font-size: 10px; }
-  .stats-column { gap: 10px; margin-top: 24px; }
-  .stats-column .side-card { padding: 12px; }
-  .bottom-banner { margin-top: 19px; }
-}
-
 @media (max-width: 900px) {
   .qbd-track-grid { grid-template-columns: minmax(0, 1fr); }
   .qbd-category-grid { grid-template-columns: minmax(0, 1fr); }
@@ -1632,3 +1556,523 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #15b8d2; outli
 @media (max-width: 600px) { .project-import-note { align-items: stretch; flex-direction: column; gap: 9px; } .project-import-note .secondary-button { align-self: flex-start; } }
 
 .qbd-cloud-probe.qbd-status-pass > svg { color: #16875b; }
+
+/* DailyQuest workspace navigation + viewport-fitted Home. */
+.app-shell-authenticated {
+  position: relative;
+  min-height: 100vh;
+  background: radial-gradient(circle at 4% 4%, rgba(227, 213, 255, .65), transparent 28rem), radial-gradient(circle at 100% 31%, rgba(197, 249, 244, .44), transparent 28rem), #fbfaff;
+}
+.app-top-nav {
+  position: relative;
+  z-index: 40;
+  flex: 0 0 auto;
+  width: 100%;
+  border-bottom: 1px solid rgba(33, 25, 54, .12);
+  background: rgba(255, 255, 255, .91);
+  backdrop-filter: blur(16px);
+}
+.app-top-nav-inner {
+  display: grid;
+  grid-template-columns: minmax(195px, auto) minmax(250px, 1fr) auto;
+  align-items: center;
+  gap: clamp(8px, 1vw, 18px);
+  width: 100%;
+  max-width: none;
+  height: clamp(48px, 5.9vh, 66px);
+  margin: 0 auto;
+  padding: 0 clamp(12px, 1.65vw, 32px);
+}
+.nav-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.nav-brand .brand-mark { width: clamp(31px, 2.25vw, 39px); height: clamp(31px, 2.25vw, 39px); font-size: clamp(18px, 1.35vw, 24px); border-radius: 11px; box-shadow: 2px 3px 0 var(--ink); }
+.nav-brand .brand-mark i { width: 14px; height: 14px; top: -6px; right: -6px; font-size: 8px; }
+.nav-brand .brand-copy { min-width: 0; gap: 4px; }
+.nav-brand .brand-copy strong { color: var(--ink); font-size: clamp(10px, .76vw, 13px); letter-spacing: .07em; white-space: nowrap; }
+.nav-brand .brand-copy span { font-size: clamp(7px, .52vw, 9px); white-space: nowrap; }
+.primary-nav { display: flex; align-items: center; justify-content: center; gap: clamp(3px, .35vw, 7px); min-width: 0; }
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: clamp(31px, 3.6vh, 39px);
+  padding: 7px clamp(8px, .85vw, 15px);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: #5c506e;
+  font-size: clamp(10px, .72vw, 13px);
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, transform .15s, color .15s;
+}
+.nav-link:hover { background: #f1ebff; color: #4f25bd; }
+.nav-link:active { transform: translateY(1px); }
+.nav-link-active { border-color: #d6c7ff; background: #eee7ff; color: #5529cf; box-shadow: inset 0 -2px 0 rgba(107, 53, 244, .12); }
+.app-header-controls { display: flex; align-items: center; justify-content: flex-end; gap: clamp(5px, .5vw, 9px); min-width: 0; }
+.app-header-controls .auth-user-chip { max-width: clamp(138px, 12vw, 205px); }
+.app-header-controls .header-streak { gap: clamp(5px, .55vw, 9px); padding: 5px clamp(8px, .8vw, 13px) 5px 6px; }
+.app-header-controls .header-streak-icon { width: clamp(24px, 1.85vw, 30px); height: clamp(24px, 1.85vw, 30px); }
+.app-header-controls .header-streak-label { font-size: clamp(6px, .52vw, 9px); }
+.app-header-controls .header-streak strong { font-size: clamp(15px, 1.18vw, 20px); }
+.app-header-controls .header-streak small { font-size: clamp(6px, .47vw, 8px); }
+
+/* All page routes share the same shell. Desktop's outer viewport never scrolls;
+   Analytics/Diagnostics and long answer content get their own contained scroll areas. */
+@media (min-width: 901px) {
+  html, body, #root { width: 100%; height: 100%; min-height: 0; }
+  body { overflow: hidden; }
+  .app-shell-authenticated { display: flex; flex-direction: column; width: 100%; height: 100vh; height: 100dvh; min-height: 0; max-height: 100dvh; overflow: hidden; }
+  .app-main { flex: 1 1 auto; width: 100%; max-width: none; min-height: 0; margin: 0; padding: clamp(7px, 1.05vh, 14px) clamp(14px, 1.8vw, 34px) 8px; overflow: hidden; }
+  .app-main-home { display: flex; flex-direction: column; }
+  .home-page { display: flex; flex: 1 1 auto; flex-direction: column; gap: clamp(7px, .9vh, 12px); width: 100%; max-width: none; min-width: 0; min-height: 0; height: 100%; margin: 0; }
+  .home-page .welcome-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(250px, 23vw); align-items: center; gap: clamp(10px, 1.3vw, 24px); flex: 0 0 auto; min-width: 0; min-height: clamp(72px, 10.5vh, 116px); margin: 0; padding: 0; }
+  .home-page .welcome-copy { min-width: 0; padding: 0; }
+  .home-page .welcome-kicker { margin-bottom: clamp(5px, .7vh, 10px); font-size: clamp(8px, .62vw, 10px); }
+  .home-page .welcome-copy h1 { margin: 0; font-size: clamp(28px, 2.7vw, 64px); line-height: 1.02; letter-spacing: -.055em; text-wrap: balance; }
+  .home-page .welcome-copy > p { margin-top: clamp(5px, .8vh, 10px); font-size: clamp(10px, .78vw, 14px); line-height: 1.35; }
+  .home-page .potd-status { width: 100%; min-width: 0; max-width: none; gap: clamp(8px, .75vw, 13px); margin: 0 !important; padding: clamp(9px, 1.3vh, 16px) clamp(10px, 1vw, 18px); border-radius: 15px; box-shadow: 3px 4px 0 var(--ink); }
+  .home-page .status-burst { width: clamp(32px, 2.7vw, 46px); height: clamp(32px, 2.7vw, 46px); border-radius: 11px; font-size: clamp(18px, 1.45vw, 26px); }
+  .home-page .potd-status-solved .status-burst { font-size: clamp(21px, 1.8vw, 31px); }
+  .home-page .status-copy { gap: 3px; }
+  .home-page .status-copy > span { font-size: clamp(7px, .53vw, 9px); }
+  .home-page .status-copy strong { font-size: clamp(9px, .72vw, 13px); }
+  .home-page .status-copy small { font-size: clamp(8px, .62vw, 11px); line-height: 1.3; }
+  .home-page .status-sparkle { right: 9px; top: 6px; font-size: clamp(12px, .9vw, 17px); }
+  .home-page .dashboard-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(275px, .36fr); align-items: stretch; flex: 1 1 auto; gap: clamp(12px, 1.25vw, 24px); min-width: 0; min-height: 0; overflow: visible; }
+  .home-page .main-column { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 0 7px 0 0; overflow: visible; }
+  .home-page .question-section-heading { flex: 0 0 auto; min-height: 0; gap: clamp(8px, .7vw, 12px); margin: 0 1px clamp(6px, .8vh, 11px); }
+  .home-page .section-number { width: clamp(34px, 2.7vw, 43px); height: clamp(34px, 2.7vw, 43px); border-radius: 11px; font-size: clamp(10px, .75vw, 12px); }
+  .home-page .question-section-heading h2 { font-size: clamp(16px, 1.18vw, 22px); }
+  .home-page .question-section-heading .eyebrow { font-size: clamp(7px, .52vw, 9px); }
+  .home-page .question-heading-doodle { font-size: clamp(20px, 1.8vw, 29px); }
+  .home-page #question-card-start { display: flex; flex: 1 1 auto; flex-direction: column; width: 100%; min-width: 0; min-height: 0 !important; max-height: 100%; height: auto; margin: 0; padding: clamp(12px, 1.45vh, 22px) clamp(14px, 1.65vw, 30px) clamp(8px, .95vh, 15px); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+  .home-page #question-card-start .question-topline { flex: 0 0 auto; }
+  .home-page #question-card-start .question-prompt { flex: 0 0 auto; max-width: none; margin: clamp(10px, 1.7vh, 23px) 0 clamp(9px, 1.5vh, 21px); font-size: clamp(19px, 1.75vw, 42px); line-height: 1.28; }
+  .home-page #question-card-start .question-code { flex: 0 0 auto; margin-bottom: clamp(8px, 1.3vh, 20px); padding: clamp(8px, .8vw, 15px); font-size: clamp(10px, .72vw, 13px); }
+  .home-page #question-card-start .answer-grid { flex: 0 0 auto; gap: clamp(7px, .8vw, 13px); }
+  .home-page #question-card-start .answer-option { min-height: clamp(48px, 7.2vh, 78px); gap: clamp(8px, .8vw, 13px); padding: clamp(7px, .85vw, 15px) clamp(9px, .95vw, 17px); border-radius: 13px; }
+  .home-page #question-card-start .answer-letter { width: clamp(30px, 2.35vw, 54px); height: clamp(30px, 2.35vw, 54px); border-radius: 10px; font-size: clamp(10px, .75vw, 16px); }
+  .home-page #question-card-start .answer-copy { font-size: clamp(11px, .83vw, 20px); line-height: 1.34; }
+  .home-page #question-card-start .answer-trailing { width: clamp(15px, 1.3vw, 23px); flex: 0 0 auto; }
+  .home-page #question-card-start .answer-feedback { flex: 0 0 auto; margin-top: clamp(8px, 1vh, 16px); padding: clamp(8px, .8vw, 14px); gap: 9px; }
+  .home-page #question-card-start .answer-feedback strong { font-size: clamp(11px, .86vw, 15px); }
+  .home-page #question-card-start .answer-feedback p { font-size: clamp(9px, .68vw, 12px); line-height: 1.4; }
+  .home-page #question-card-start .solution-card { flex: 0 0 auto; margin-top: clamp(8px, 1vh, 17px); padding: clamp(10px, 1.1vw, 20px); }
+  .home-page #question-card-start .solution-heading { margin-bottom: clamp(7px, .9vh, 14px); }
+  .home-page #question-card-start .solution-icon { width: clamp(31px, 2.6vw, 42px); height: clamp(31px, 2.6vw, 42px); }
+  .home-page #question-card-start .solution-heading h3 { font-size: clamp(13px, 1vw, 18px); }
+  .home-page #question-card-start .solution-copy { font-size: clamp(11px, .82vw, 14px); line-height: 1.55; }
+  .home-page #question-card-start .takeaway-box { margin-top: clamp(8px, .9vh, 16px); padding: clamp(8px, .8vw, 13px); }
+  .home-page #question-card-start .takeaway-box p { font-size: clamp(9px, .7vw, 12px); line-height: 1.45; }
+  .home-page #question-card-start .question-actions { position: sticky; bottom: -1px; z-index: 5; flex: 0 0 auto; align-items: center; gap: clamp(7px, .9vw, 14px); margin-top: auto; padding: clamp(7px, .75vh, 12px) 0 2px; background: linear-gradient(to bottom, rgba(255,255,255,.91), #fff 38%); }
+  .home-page #question-card-start .lock-note { font-size: clamp(9px, .67vw, 11px); }
+  .home-page #question-card-start .action-buttons { gap: clamp(4px, .5vw, 9px); }
+  .home-page #question-card-start .math-generate-button, .home-page #question-card-start .text-button { min-height: clamp(30px, 3.8vh, 40px); padding: clamp(5px, .65vw, 10px) clamp(6px, .72vw, 12px); font-size: clamp(9px, .66vw, 11px); white-space: nowrap; }
+  .home-page #question-card-start .randomize-button { min-height: clamp(34px, 4.8vh, 47px); padding: clamp(7px, .75vw, 12px) clamp(8px, .85vw, 15px); font-size: clamp(10px, .72vw, 12px); }
+  .home-page .companion-column { display: flex; min-width: 0; min-height: 0; height: 100%; padding: 0 7px 0 0; overflow: visible; }
+  .home-page .companion-panel { display: flex; flex: 1 1 auto; flex-direction: column; justify-content: flex-start; width: 100%; height: 100%; min-width: 0; min-height: 0; max-height: 100%; padding: clamp(10px, 1.25vh, 19px) clamp(10px, 1.15vw, 19px) clamp(8px, 1vh, 16px); border-radius: 20px; overflow: hidden; }
+  .home-page .companion-panel-top { flex: 0 0 auto; gap: clamp(7px, .7vw, 11px); }
+  .home-page .companion-star { width: clamp(30px, 2.6vw, 58px); height: clamp(30px, 2.6vw, 58px); border-radius: 10px; }
+  .home-page .companion-panel-top .eyebrow { font-size: clamp(7px, .53vw, 9px); }
+  .home-page .companion-panel-top h2 { font-size: clamp(14px, 1.08vw, 25px); }
+  .home-page .companion-level-chip { padding: clamp(4px, .5vw, 7px) clamp(6px, .7vw, 10px); font-size: clamp(8px, .54vw, 10px); }
+  .home-page .companion-panel .pet-card { display: flex; flex: 1 1 auto; flex-direction: column; justify-content: space-evenly; min-height: 0; gap: clamp(5px, .85vh, 12px); margin: clamp(7px, 1.25vh, 19px) 0 clamp(5px, .8vh, 12px); }
+  .home-page .companion-panel .pet-speech { flex: 0 0 auto; min-height: clamp(54px, 8.5vh, 92px); padding: clamp(8px, .85vw, 15px); gap: 8px; border-radius: 14px; }
+  .home-page .companion-panel .pet-speech p { font-size: clamp(11px, .95vw, 17px); line-height: 1.35; }
+  .home-page .companion-panel .speech-dot { width: clamp(6px, .5vw, 9px); height: clamp(6px, .5vw, 9px); }
+  .home-page .companion-panel .pet-avatar-wrap { width: 100%; height: clamp(110px, 25vh, 340px); min-height: 0; flex: 1 1 auto; }
+  .home-page .companion-panel .pet-pixels { grid-template-columns: repeat(12, clamp(7px, .72vw, 18px)); grid-auto-rows: clamp(7px, .72vw, 18px); }
+  .home-page .companion-panel .pet-pixel { width: clamp(7px, .72vw, 18px); height: clamp(7px, .72vw, 18px); }
+  .home-page .companion-panel .pet-level { right: clamp(1px, .3vw, 7px); bottom: 4px; padding: clamp(4px, .48vw, 8px) clamp(5px, .55vw, 9px); font-size: clamp(8px, .55vw, 11px); }
+  .home-page .companion-panel .pet-caption { margin: 0; font-size: clamp(7px, .53vw, 10px); }
+  .home-page .companion-level-progress { flex: 0 0 auto; margin-top: auto; padding: clamp(8px, .9vw, 14px); }
+  .home-page .companion-progress-copy span { font-size: clamp(7px, .52vw, 9px); }
+  .home-page .companion-progress-copy strong { font-size: clamp(9px, .7vw, 12px); }
+  .home-page .companion-level-progress > p { margin-top: 6px; font-size: clamp(8px, .6vw, 11px); line-height: 1.35; }
+  .section-page { display: flex; flex-direction: column; width: 100%; max-width: none; height: 100%; min-width: 0; min-height: 0; margin: 0; overflow: hidden; }
+  .page-heading { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; padding: 4px 2px clamp(10px, 1.4vh, 18px); }
+  .page-heading-icon { display: grid; place-items: center; width: clamp(36px, 2.8vw, 46px); height: clamp(36px, 2.8vw, 46px); border: 1.5px solid var(--ink); border-radius: 12px; color: var(--purple); background: #eee5ff; box-shadow: 2px 3px 0 var(--ink); }
+  .page-heading > div { min-width: 0; }
+  .page-heading .eyebrow { margin: 0 0 4px; font-size: clamp(7px, .55vw, 10px); }
+  .page-heading h1 { margin: 0; font-size: clamp(21px, 1.65vw, 31px); line-height: 1.12; letter-spacing: -.045em; }
+  .page-heading > div > p:last-child { margin: 5px 0 0; color: #5d526d; font-size: clamp(10px, .75vw, 13px); line-height: 1.4; }
+  .page-scroll-area { flex: 1 1 auto; min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 0 6px 8px 2px; scrollbar-gutter: stable; }
+  .stats-column-analytics { display: grid; grid-template-columns: minmax(0, .95fr) minmax(0, .95fr) minmax(0, .95fr) minmax(0, 1.45fr); gap: clamp(9px, .9vw, 16px); align-content: start; min-width: 0; margin: 0; }
+  .stats-column-analytics > .side-card { min-width: 0; }
+  .stats-column-analytics .xp-card, .stats-column-analytics .streak-card { min-height: 180px; }
+  .stats-column-analytics .metrics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-content: start; }
+  .stats-column-analytics .recent-card { grid-column: 4; grid-row: 1 / span 2; }
+  .stats-column-analytics .question-bank-diagnostics { grid-column: 1 / -1; }
+  .stats-column-analytics .streak-number, .stats-column-analytics .muted-note { display: initial; }
+  .stats-column-analytics .streak-number { display: flex; }
+  .stats-column-analytics .week-strip { margin-top: 12px; }
+  .stats-column-analytics .metric-card { min-height: 83px; }
+  .qbd-diagnostics-page { min-width: 0; margin: 0; }
+  .qbd-diagnostics-page .qbd-tools-body { margin-top: 0; padding-top: 0; border-top: 0; }
+}
+
+@media (max-width: 900px) {
+  html, body, #root { height: auto; min-height: 100%; }
+  body { overflow-x: hidden; overflow-y: auto; }
+  .app-shell-authenticated { display: flex; flex-direction: column; min-height: 100dvh; height: auto; max-height: none; overflow: visible; }
+  .app-top-nav-inner { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "brand controls" "nav nav"; gap: 8px; height: auto; min-height: 0; padding: 9px 12px 8px; }
+  .nav-brand { grid-area: brand; }
+  .nav-brand .brand-mark { width: 31px; height: 31px; font-size: 18px; }
+  .nav-brand .brand-copy strong { font-size: 10px; }
+  .nav-brand .brand-copy span { display: none; }
+  .primary-nav { grid-area: nav; justify-content: stretch; gap: 6px; width: 100%; }
+  .nav-link { flex: 1 1 0; min-height: 35px; padding: 7px 8px; font-size: 11px; }
+  .app-header-controls { grid-area: controls; gap: 5px; }
+  .app-header-controls .auth-user-chip { max-width: 130px; gap: 4px; padding: 3px; }
+  .app-header-controls .auth-user-avatar { width: 27px; height: 27px; }
+  .app-header-controls .auth-user-copy { display: none; }
+  .app-header-controls .auth-signout-button { width: 27px; height: 27px; }
+  .app-header-controls .header-streak { gap: 4px; padding: 4px 7px 4px 4px; }
+  .app-header-controls .header-streak-icon { width: 25px; height: 25px; }
+  .app-header-controls .header-streak-label { font-size: 6px; }
+  .app-header-controls .header-streak strong { font-size: 16px; }
+  .app-header-controls .header-streak small { font-size: 6px; margin-left: -3px; }
+  .app-main { flex: initial; width: 100%; max-width: none; margin: 0; padding: 13px 12px 18px; overflow: visible; }
+  .app-main-home { display: block; }
+  .home-page { display: flex; flex-direction: column; gap: 13px; height: auto; min-height: 0; }
+  .home-page .welcome-row { display: flex; align-items: stretch; flex-direction: column; gap: 13px; min-height: 0; margin: 0 0 1px; padding: 0; }
+  .home-page .welcome-copy { padding: 0; }
+  .home-page .welcome-kicker { margin-bottom: 8px; font-size: 9px; }
+  .home-page .welcome-copy h1 { font-size: clamp(27px, 6.2vw, 42px); line-height: 1.05; }
+  .home-page .welcome-copy > p { margin-top: 8px; font-size: 12px; }
+  .home-page .potd-status { width: 100%; min-width: 0; max-width: none; margin: 0 !important; padding: 12px; }
+  .home-page .dashboard-grid { display: flex; flex-direction: column; gap: 15px; min-height: 0; overflow: visible; }
+  .home-page .main-column { display: flex; flex-direction: column; overflow: visible; }
+  .home-page .question-section-heading { margin: 0 1px 8px; }
+  .home-page #question-card-start { display: block; width: auto; height: auto; max-height: none; min-height: 0 !important; margin: 0 5px 5px 0; padding: 17px 15px 13px; overflow: visible; scrollbar-gutter: auto; }
+  .home-page #question-card-start .question-prompt { margin: 18px 0 16px; font-size: clamp(21px, 5.6vw, 30px); line-height: 1.34; }
+  .home-page #question-card-start .answer-grid { gap: 9px; }
+  .home-page #question-card-start .answer-option { min-height: 64px; padding: 10px; gap: 10px; }
+  .home-page #question-card-start .answer-copy { font-size: clamp(12px, 3.2vw, 15px); }
+  .home-page #question-card-start .question-actions { position: static; flex-wrap: wrap; gap: 9px; margin-top: 16px; padding: 0; background: none; }
+  .home-page #question-card-start .lock-note { max-width: none; }
+  .home-page #question-card-start .action-buttons { flex-wrap: wrap; justify-content: flex-end; }
+  .home-page .companion-column { display: flex; min-height: 0; height: auto; overflow: visible; }
+  .home-page .companion-panel { min-height: 460px; height: auto; padding: 16px 14px 13px; overflow: hidden; }
+  .home-page .companion-panel .pet-card { flex: 1 1 auto; gap: 8px; margin: 12px 0; }
+  .home-page .companion-panel .pet-speech { min-height: 66px; padding: 11px 12px; }
+  .home-page .companion-panel .pet-speech p { font-size: 14px; }
+  .home-page .companion-panel .pet-avatar-wrap { height: 205px; flex: 0 0 auto; }
+  .home-page .companion-panel .pet-pixels { grid-template-columns: repeat(12, 13px); grid-auto-rows: 13px; }
+  .home-page .companion-panel .pet-pixel { width: 13px; height: 13px; }
+  .home-page .companion-level-progress { padding: 11px; }
+  .section-page { display: flex; flex-direction: column; height: auto; min-height: calc(100dvh - 110px); overflow: visible; }
+  .page-heading { gap: 10px; padding: 1px 1px 13px; }
+  .page-heading-icon { width: 39px; height: 39px; }
+  .page-heading h1 { font-size: clamp(22px, 5vw, 29px); }
+  .page-heading > div > p:last-child { font-size: 11px; }
+  .page-scroll-area { flex: initial; min-height: 0; padding: 0 0 12px; overflow: visible; }
+  .stats-column-analytics { display: flex; flex-direction: column; gap: 12px; margin: 0; }
+  .stats-column-analytics .metrics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stats-column-analytics .recent-card { grid-column: auto; grid-row: auto; }
+  .qbd-diagnostics-page .qbd-tools-body { margin-top: 0; padding-top: 0; border-top: 0; }
+}
+
+@media (max-width: 480px) {
+  .app-top-nav-inner { padding-left: 9px; padding-right: 9px; }
+  .nav-link { font-size: 10px; }
+  .home-page .welcome-copy h1 { font-size: clamp(25px, 6.7vw, 34px); }
+  .home-page #question-card-start .answer-grid { grid-template-columns: minmax(0, 1fr); }
+  .home-page #question-card-start .answer-option { min-height: 58px; }
+  .home-page #question-card-start .action-buttons { width: 100%; justify-content: stretch; }
+  .home-page #question-card-start .action-buttons > button { flex: 1 1 auto; }
+  .home-page .companion-panel { min-height: 430px; }
+}
+
+/* Stable workspace frame: use fixed design units so browser zoom does not activate
+   compensating vw/vh font sizes. The viewport sizes the frame; cards stay inside it. */
+@media (min-width: 901px) {
+  html, body, #root {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+  body { overflow: hidden; }
+  .app-shell-authenticated {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    max-height: 100dvh;
+    overflow: hidden;
+  }
+  .app-top-nav-inner {
+    grid-template-columns: minmax(170px, auto) minmax(0, 1fr) auto;
+    gap: 12px;
+    height: 56px;
+    padding: 0 20px;
+  }
+  .nav-brand { gap: 9px; }
+  .nav-brand .brand-mark { width: 34px; height: 34px; font-size: 20px; }
+  .nav-brand .brand-mark i { width: 13px; height: 13px; top: -5px; right: -5px; font-size: 7px; }
+  .nav-brand .brand-copy strong { font-size: 11px; }
+  .nav-brand .brand-copy span { font-size: 8px; }
+  .primary-nav { gap: 4px; }
+  .nav-link { min-height: 34px; padding: 7px 11px; font-size: 12px; gap: 6px; }
+  .app-header-controls { gap: 8px; }
+  .app-header-controls .auth-user-chip { max-width: 185px; }
+  .app-header-controls .header-streak { gap: 7px; padding: 5px 11px 5px 6px; }
+  .app-header-controls .header-streak-icon { width: 28px; height: 28px; }
+  .app-header-controls .header-streak-label { font-size: 8px; }
+  .app-header-controls .header-streak strong { font-size: 18px; }
+  .app-header-controls .header-streak small { font-size: 7px; }
+
+  .app-main {
+    flex: 1 1 auto;
+    width: 100%;
+    max-width: none;
+    min-height: 0;
+    margin: 0;
+    padding: 8px 22px 14px !important;
+    overflow: hidden;
+  }
+  .app-main-home { display: flex; flex-direction: column; }
+  .home-page {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+  }
+  .home-page .welcome-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(270px, 26%);
+    align-items: center;
+    gap: 16px;
+    flex: 0 0 auto;
+    min-width: 0;
+    min-height: 0;
+    height: auto;
+    margin: 0;
+    padding: 0;
+  }
+  .home-page .welcome-copy { min-width: 0; padding: 0; }
+  .home-page .welcome-kicker { margin-bottom: 6px; font-size: 9px; }
+  .home-page .welcome-copy h1 {
+    margin: 0;
+    font-size: 2.35rem;
+    line-height: 1.04;
+    letter-spacing: -.055em;
+    text-wrap: balance;
+  }
+  .home-page .welcome-copy > p { margin: 7px 0 0; font-size: 12px; line-height: 1.35; }
+  .home-page .potd-status {
+    width: 100%; min-width: 0; max-width: none;
+    gap: 10px; margin: 0 !important; padding: 11px 15px 11px 12px;
+    border-radius: 15px; box-shadow: 3px 4px 0 var(--ink);
+  }
+  .home-page .status-burst { width: 40px; height: 40px; border-radius: 11px; font-size: 22px; }
+  .home-page .potd-status-solved .status-burst { font-size: 27px; }
+  .home-page .status-copy { gap: 3px; }
+  .home-page .status-copy > span { font-size: 8px; }
+  .home-page .status-copy strong { font-size: 11px; }
+  .home-page .status-copy small { font-size: 10px; line-height: 1.35; }
+  .home-page .status-sparkle { right: 9px; top: 6px; font-size: 15px; }
+
+  .home-page .dashboard-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(275px, .36fr);
+    align-items: stretch;
+    flex: 1 1 0;
+    gap: 16px;
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    overflow: visible;
+  }
+  .home-page .main-column {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    padding: 0 7px 7px 0;
+    overflow: hidden;
+  }
+  .home-page .question-section-heading {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 9px;
+    min-height: 0;
+    margin: 0 1px 7px;
+  }
+  .home-page .section-number { width: 38px; height: 38px; border-radius: 11px; font-size: 11px; }
+  .home-page .question-section-heading h2 { font-size: 19px; }
+  .home-page .question-section-heading .eyebrow { font-size: 8px; }
+  .home-page .question-heading-doodle { font-size: 25px; }
+  .home-page #question-card-start {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    width: 100%;
+    height: auto;
+    min-width: 0;
+    min-height: 0 !important;
+    max-height: 100%;
+    margin: 0;
+    padding: 15px 20px 10px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+  .home-page #question-card-start .question-topline { flex: 0 0 auto; }
+  .home-page #question-card-start .question-prompt {
+    flex: 0 0 auto;
+    max-width: none;
+    margin: 12px 0 13px;
+    font-size: 1.45rem;
+    line-height: 1.28;
+  }
+  .home-page #question-card-start .question-code { flex: 0 0 auto; margin: 0 0 12px; padding: 10px 12px; font-size: 11px; }
+  .home-page #question-card-start .answer-grid { flex: 0 0 auto; gap: 10px; }
+  .home-page #question-card-start .answer-option { min-height: 58px; gap: 10px; padding: 8px 12px; border-radius: 12px; }
+  .home-page #question-card-start .answer-letter { width: 34px; height: 34px; border-radius: 9px; font-size: 12px; }
+  .home-page #question-card-start .answer-copy { font-size: 14px; line-height: 1.35; }
+  .home-page #question-card-start .answer-trailing { width: 18px; flex: 0 0 auto; }
+  .home-page #question-card-start .answer-feedback { flex: 0 0 auto; margin-top: 10px; padding: 10px 12px; gap: 9px; }
+  .home-page #question-card-start .answer-feedback strong { font-size: 13px; }
+  .home-page #question-card-start .answer-feedback p { font-size: 11px; line-height: 1.4; }
+  .home-page #question-card-start .solution-card { flex: 0 0 auto; margin-top: 10px; padding: 13px 14px; }
+  .home-page #question-card-start .solution-heading { margin-bottom: 8px; }
+  .home-page #question-card-start .solution-icon { width: 34px; height: 34px; }
+  .home-page #question-card-start .solution-heading h3 { font-size: 15px; }
+  .home-page #question-card-start .solution-copy { font-size: 12px; line-height: 1.5; }
+  .home-page #question-card-start .takeaway-box { margin-top: 10px; padding: 10px; }
+  .home-page #question-card-start .takeaway-box p { font-size: 10px; line-height: 1.45; }
+  .home-page #question-card-start .question-actions {
+    position: sticky; bottom: -1px; z-index: 5;
+    display: flex; flex: 0 0 auto; align-items: center;
+    gap: 9px; margin-top: auto; padding: 9px 0 2px;
+    background: linear-gradient(to bottom, rgba(255,255,255,.91), #fff 38%);
+  }
+  .home-page #question-card-start .lock-note { font-size: 10px; }
+  .home-page #question-card-start .action-buttons { gap: 6px; }
+  .home-page #question-card-start .math-generate-button,
+  .home-page #question-card-start .text-button { min-height: 34px; padding: 7px 9px; font-size: 10px; white-space: nowrap; }
+  .home-page #question-card-start .randomize-button { min-height: 39px; padding: 8px 11px; font-size: 11px; }
+
+  .home-page .companion-column {
+    display: flex; min-width: 0; min-height: 0; height: 100%;
+    padding: 0 7px 7px 0; overflow: hidden;
+  }
+  .home-page .companion-panel {
+    display: flex; flex: 1 1 auto; flex-direction: column;
+    justify-content: flex-start; width: 100%; height: 100%;
+    min-width: 0; min-height: 0; max-height: 100%;
+    padding: 13px 14px 11px; border-radius: 20px; overflow: hidden;
+  }
+  .home-page .companion-panel-top { flex: 0 0 auto; gap: 9px; }
+  .home-page .companion-star { width: 37px; height: 37px; border-radius: 10px; }
+  .home-page .companion-panel-top .eyebrow { font-size: 8px; }
+  .home-page .companion-panel-top h2 { font-size: 17px; }
+  .home-page .companion-level-chip { padding: 5px 8px; font-size: 9px; }
+  .home-page .companion-panel .pet-card {
+    display: flex; flex: 1 1 auto; flex-direction: column; justify-content: space-evenly;
+    min-height: 0; gap: 8px; margin: 10px 0;
+  }
+  .home-page .companion-panel .pet-speech { flex: 0 0 auto; min-height: 62px; padding: 10px 12px; gap: 8px; border-radius: 13px; }
+  .home-page .companion-panel .pet-speech p { font-size: 14px; line-height: 1.35; }
+  .home-page .companion-panel .speech-dot { width: 7px; height: 7px; }
+  .home-page .companion-panel .pet-avatar-wrap { width: 100%; height: auto; min-height: 120px; max-height: 240px; flex: 1 1 155px; }
+  .home-page .companion-panel .pet-pixels { grid-template-columns: repeat(12, 13px); grid-auto-rows: 13px; }
+  .home-page .companion-panel .pet-pixel { width: 13px; height: 13px; }
+  .home-page .companion-panel .pet-level { right: 4px; bottom: 4px; padding: 5px 8px; font-size: 9px; }
+  .home-page .companion-panel .pet-caption { margin: 0; font-size: 8px; }
+  .home-page .companion-level-progress { flex: 0 0 auto; margin-top: auto; padding: 10px; }
+  .home-page .companion-progress-copy span { font-size: 8px; }
+  .home-page .companion-progress-copy strong { font-size: 10px; }
+  .home-page .companion-level-progress > p { margin-top: 5px; font-size: 9px; line-height: 1.35; }
+
+  .section-page { display: flex; flex-direction: column; width: 100%; max-width: none; height: 100%; min-width: 0; min-height: 0; margin: 0; overflow: hidden; }
+  .page-heading { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; padding: 4px 2px 14px; }
+  .page-heading-icon { display: grid; place-items: center; width: 42px; height: 42px; border: 1.5px solid var(--ink); border-radius: 12px; color: var(--purple); background: #eee5ff; box-shadow: 2px 3px 0 var(--ink); }
+  .page-heading > div { min-width: 0; }
+  .page-heading .eyebrow { margin: 0 0 4px; font-size: 8px; }
+  .page-heading h1 { margin: 0; font-size: 26px; line-height: 1.12; letter-spacing: -.045em; }
+  .page-heading > div > p:last-child { margin: 5px 0 0; color: #5d526d; font-size: 12px; line-height: 1.4; }
+  .page-scroll-area { flex: 1 1 auto; min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 0 6px 8px 2px; scrollbar-gutter: stable; }
+  .stats-column-analytics { display: grid; grid-template-columns: minmax(0, .95fr) minmax(0, .95fr) minmax(0, .95fr) minmax(0, 1.45fr); gap: 12px; align-content: start; min-width: 0; margin: 0; }
+  .stats-column-analytics > .side-card { min-width: 0; }
+  .stats-column-analytics .xp-card, .stats-column-analytics .streak-card { min-height: 180px; }
+  .stats-column-analytics .metrics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-content: start; }
+  .stats-column-analytics .recent-card { grid-column: 4; grid-row: 1 / span 2; }
+  .stats-column-analytics .question-bank-diagnostics { grid-column: 1 / -1; }
+  .stats-column-analytics .streak-number { display: flex; }
+  .stats-column-analytics .muted-note { display: initial; }
+  .stats-column-analytics .week-strip { margin-top: 12px; }
+  .stats-column-analytics .metric-card { min-height: 83px; }
+  .qbd-diagnostics-page { min-width: 0; margin: 0; }
+  .qbd-diagnostics-page .qbd-tools-body { margin-top: 0; padding-top: 0; border-top: 0; }
+}
+
+@media (min-width: 901px) and (max-width: 1150px) {
+  .app-top-nav-inner { grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; padding-left: 12px; padding-right: 12px; }
+  .nav-brand .brand-copy span { display: none; }
+  .nav-link { gap: 4px; padding: 7px 8px; font-size: 11px; }
+  .app-header-controls .auth-user-chip { max-width: 145px; }
+  .app-header-controls .auth-user-copy { max-width: 64px; }
+  .home-page .welcome-row { grid-template-columns: minmax(0, 1fr) minmax(245px, 28%); gap: 12px; }
+  .home-page .welcome-copy h1 { font-size: 2rem; }
+  .home-page .question-section-heading h2 { font-size: 17px; }
+  .home-page #question-card-start { padding: 12px 14px 8px; }
+  .home-page #question-card-start .question-prompt { font-size: 1.25rem; margin: 9px 0 10px; }
+  .home-page #question-card-start .answer-option { min-height: 49px; padding: 6px 8px; }
+  .home-page #question-card-start .answer-copy { font-size: 12px; }
+  .home-page .companion-panel { padding: 10px; }
+  .home-page .companion-panel .pet-pixels { grid-template-columns: repeat(12, 11px); grid-auto-rows: 11px; }
+  .home-page .companion-panel .pet-pixel { width: 11px; height: 11px; }
+}
+
+@media (min-width: 901px) and (max-height: 720px) {
+  .app-top-nav-inner { height: 49px; }
+  .app-main { padding-top: 5px !important; padding-bottom: 9px !important; }
+  .home-page { gap: 4px; }
+  .home-page .welcome-copy h1 { font-size: 1.9rem; }
+  .home-page .welcome-kicker { margin-bottom: 4px; }
+  .home-page .welcome-copy > p { margin-top: 4px; font-size: 11px; }
+  .home-page .potd-status { padding: 8px 12px 8px 10px; }
+  .home-page .status-burst { width: 34px; height: 34px; }
+  .home-page .question-section-heading { margin-bottom: 5px; }
+  .home-page .section-number { width: 32px; height: 32px; }
+  .home-page .question-section-heading h2 { font-size: 16px; }
+  .home-page #question-card-start { padding: 10px 14px 6px; }
+  .home-page #question-card-start .question-prompt { font-size: 1.2rem; margin: 8px 0 9px; }
+  .home-page #question-card-start .answer-option { min-height: 43px; padding: 5px 8px; }
+  .home-page #question-card-start .answer-letter { width: 29px; height: 29px; }
+  .home-page #question-card-start .answer-copy { font-size: 11px; }
+  .home-page #question-card-start .answer-feedback { margin-top: 7px; padding: 7px 9px; }
+  .home-page #question-card-start .solution-card { margin-top: 7px; padding: 9px; }
+  .home-page #question-card-start .solution-heading { margin-bottom: 5px; }
+  .home-page #question-card-start .solution-copy { font-size: 10px; line-height: 1.35; }
+  .home-page #question-card-start .takeaway-box { margin-top: 6px; padding: 7px; }
+  .home-page #question-card-start .question-actions { padding-top: 5px; }
+  .home-page .companion-panel .pet-speech { min-height: 48px; padding: 7px 9px; }
+  .home-page .companion-panel .pet-speech p { font-size: 12px; }
+  .home-page .companion-panel .pet-avatar-wrap { min-height: 90px; flex-basis: 120px; }
+  .home-page .companion-level-progress { padding: 7px; }
+  .home-page .companion-level-progress > p { font-size: 8px; }
+}
+
+@media (max-width: 900px) {
+  .app-main-home { overflow: visible; }
+  .home-page { overflow: visible; }
+  .home-page .main-column, .home-page .companion-column { overflow: visible; }
+  .home-page #question-card-start { overflow: visible; }
+}
+

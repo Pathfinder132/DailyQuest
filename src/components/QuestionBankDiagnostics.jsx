@@ -85,10 +85,16 @@ export default function QuestionBankDiagnostics({
   cloudSyncStatus = 'local',
   firebaseConfigured = false,
   onTestCloud,
+  mode = 'all',
+  externalRuntimeErrors,
 }) {
-  const [toolsOpen, setToolsOpen] = useState(false);
+  const diagnosticMode = mode === 'diagnostics';
+  const showInventory = mode !== 'diagnostics';
+  const showTools = mode !== 'inventory';
+  const [toolsOpen, setToolsOpen] = useState(diagnosticMode);
   const [lastRun, setLastRun] = useState(null);
   const [runtimeErrors, setRuntimeErrors] = useState([]);
+  const visibleRuntimeErrors = Array.isArray(externalRuntimeErrors) ? externalRuntimeErrors : runtimeErrors;
   const [storageEstimate, setStorageEstimate] = useState(null);
   const [cloudProbe, setCloudProbe] = useState({ status: 'not-run', detail: 'Not checked in this session.' });
   const [busyAction, setBusyAction] = useState('');
@@ -139,6 +145,7 @@ export default function QuestionBankDiagnostics({
   }, [questions, store?.history]);
 
   useEffect(() => {
+    if (Array.isArray(externalRuntimeErrors)) return undefined;
     const record = (entry) => setRuntimeErrors((previous) => [...previous, { at: new Date().toISOString(), message: safeText(entry) }].slice(-12));
     const onError = (event) => record(event?.error?.message || event?.message || 'Uncaught browser error');
     const onRejection = (event) => record(event?.reason?.message || event?.reason || 'Unhandled promise rejection');
@@ -148,7 +155,7 @@ export default function QuestionBankDiagnostics({
       window.removeEventListener('error', onError);
       window.removeEventListener('unhandledrejection', onRejection);
     };
-  }, []);
+  }, [externalRuntimeErrors]);
 
   useEffect(() => {
     let active = true;
@@ -180,7 +187,7 @@ export default function QuestionBankDiagnostics({
       checkRow('firebase-config', 'Firebase configuration', firebaseConfigured ? 'pass' : 'warn', firebaseConfigured ? 'Required Firebase web configuration fields are present; values are not included in this report.' : 'Firebase is not configured in this build.'),
       checkRow('auth', 'Account session', authStatus === 'signed-in' ? 'pass' : authStatus === 'guest' ? 'info' : 'warn', authStatus === 'signed-in' ? 'A signed-in account is active. Account identifiers are omitted from diagnostics.' : authStatus === 'guest' ? 'Offline/guest mode is active; this session does not sync across devices.' : `Current auth state: ${authStatus}.`),
       checkRow('cloud-sync', 'Cloud sync state', cloudSyncStatus === 'synced' ? 'pass' : cloudSyncStatus === 'error' ? 'warn' : 'info', cloudSyncStatus === 'synced' ? 'The latest known cloud sync completed.' : cloudSyncStatus === 'error' ? 'The app reports a cloud sync issue. Use Test cloud connection and inspect the visible app error.' : `Current state: ${cloudSyncStatus}.`),
-      checkRow('runtime-errors', 'Browser runtime errors', runtimeErrors.length ? 'warn' : 'pass', runtimeErrors.length ? `${runtimeErrors.length} runtime error(s) recorded in this page session.` : 'No browser errors have been captured during this page session.'),
+      checkRow('runtime-errors', 'Browser runtime errors', visibleRuntimeErrors.length ? 'warn' : 'pass', visibleRuntimeErrors.length ? `${visibleRuntimeErrors.length} runtime error(s) recorded in this page session.` : 'No browser errors have been captured during this page session.'),
     ];
     const stats = store?.stats || {};
     if (!Number.isFinite(stats.xp) || stats.xp < 0 || !Number.isFinite(stats.totalCorrect) || stats.totalCorrect < 0) {
@@ -233,7 +240,7 @@ export default function QuestionBankDiagnostics({
       },
       cloudProfileProbe: cloudProbe,
       checks,
-      recentRuntimeErrors: runtimeErrors,
+      recentRuntimeErrors: visibleRuntimeErrors,
       privacyNote: 'No email, account UID, question text, selected answers, OAuth codes or access tokens are intentionally included.',
     };
   }
@@ -308,13 +315,15 @@ export default function QuestionBankDiagnostics({
   const resultLabel = (status) => status === 'pass' ? 'PASS' : status === 'error' ? 'ERROR' : status === 'warn' ? 'CHECK' : status === 'running' ? 'RUNNING' : 'INFO';
 
   return (
-    <section className="question-bank-diagnostics side-card" aria-labelledby="question-bank-title">
+    <section className={`question-bank-diagnostics side-card ${diagnosticMode ? 'qbd-diagnostics-page' : ''} ${mode === 'inventory' ? 'qbd-inventory-only' : ''}`} aria-labelledby={diagnosticMode ? 'diagnostics-page-title' : 'question-bank-title'}>
+      {showInventory && (
+<>
       <div className="qbd-heading">
         <div className="qbd-heading-icon"><Layers size={20} /></div>
         <div className="qbd-title-copy">
-          <p className="eyebrow">QUESTION BANK</p>
-          <h3 id="question-bank-title">Your available questions</h3>
-          <p>{questions.length} question record(s) across {inventory.filter((track) => track.count > 0).length} active track(s). Built-ins, imported questions and future project banks are counted separately.</p>
+          <p className="eyebrow">{diagnosticMode ? 'SYSTEM HEALTH' : 'QUESTION BANK'}</p>
+          <h3 id="question-bank-title">{diagnosticMode ? 'Diagnostics & troubleshooting' : 'Your available questions'}</h3>
+          <p>{diagnosticMode ? 'Safe checks for question data, browser storage, audio, account state and cloud access.' : `${questions.length} question record(s) across ${inventory.filter((track) => track.count > 0).length} active track(s). Built-ins, imported questions and future project banks are counted separately.`}</p>
         </div>
         <span className="qbd-total"><strong>{questions.length}</strong><small>QUESTIONS</small></span>
       </div>
@@ -345,12 +354,15 @@ export default function QuestionBankDiagnostics({
         ) : <p className="qbd-empty">No questions are available yet.</p>}
       </div>
 
-      <div className="qbd-tool-toggle-row">
+      </>
+      )}
+
+      {showTools && !diagnosticMode && <div className="qbd-tool-toggle-row">
         <div><strong><Activity size={17} /> Troubleshooting tools</strong><span>Safe checks for data, browser storage, question IDs and cloud access.</span></div>
         <button type="button" className="qbd-toggle" aria-expanded={toolsOpen} onClick={() => setToolsOpen((open) => !open)}>{toolsOpen ? 'Hide tools' : 'Open tools'} {toolsOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</button>
-      </div>
+      </div>}
 
-      {toolsOpen && (
+      {showTools && (diagnosticMode || toolsOpen) && (
         <div className="qbd-tools-body">
           <div className="qbd-tool-buttons">
             <button type="button" className="qbd-primary-button" onClick={runChecks} disabled={busyAction === 'checks'}><RefreshCw size={16} className={busyAction === 'checks' ? 'qbd-spin' : ''} /> {busyAction === 'checks' ? 'Checking…' : 'Run all checks'}</button>
@@ -364,7 +376,7 @@ export default function QuestionBankDiagnostics({
           {cloudProbe.status !== 'not-run' && <div className={`qbd-cloud-probe qbd-status-${cloudProbe.status}`}>{resultIcon(cloudProbe.status)}<div><strong>Cloud profile read test · {resultLabel(cloudProbe.status)}</strong><p>{cloudProbe.detail}</p></div></div>}
           <div className="qbd-diagnostics-toolbar"><div><h4>Health check results</h4><span>{lastRun ? `Last run ${new Date(lastRun.createdAt).toLocaleTimeString()}` : 'Run checks to generate an actionable report.'}</span></div>{lastRun && <span className={`qbd-summary-status qbd-summary-${summaryStatus}`}>{lastRun.checks.length} checks · {summaryStatus === 'pass' ? 'All clear' : summaryStatus === 'warn' ? 'Review warnings' : 'Review errors'}</span>}</div>
           {lastRun && <div className="qbd-check-list">{lastRun.checks.map((check) => <div className={`qbd-check-row qbd-status-${check.status}`} key={check.id}><span className="qbd-check-icon">{resultIcon(check.status)}</span><div><strong>{check.title}</strong><p>{check.detail}</p></div><span className="qbd-check-label">{resultLabel(check.status)}</span></div>)}</div>}
-          <div className="qbd-runtime-note"><BugMark /><div><strong>Session runtime errors</strong><p>{runtimeErrors.length ? `${runtimeErrors.length} error(s) captured during this page session. They're included in the diagnostic report after basic email/token redaction.` : 'No browser runtime errors have been captured in this page session.'}</p>{runtimeErrors.length > 0 && <ul>{runtimeErrors.slice(-4).map((error, index) => <li key={`${error.at}-${index}`}>{new Date(error.at).toLocaleTimeString()}: {error.message}</li>)}</ul>}</div></div>
+          <div className="qbd-runtime-note"><BugMark /><div><strong>Session runtime errors</strong><p>{visibleRuntimeErrors.length ? `${visibleRuntimeErrors.length} error(s) captured during this page session. They're included in the diagnostic report after basic email/token redaction.` : 'No browser runtime errors have been captured in this page session.'}</p>{visibleRuntimeErrors.length > 0 && <ul>{visibleRuntimeErrors.slice(-4).map((error, index) => <li key={`${error.at}-${index}`}>{new Date(error.at).toLocaleTimeString()}: {error.message}</li>)}</ul>}</div></div>
           <div className="qbd-storage-note"><HardDrive size={16} /><span>{storageEstimate ? `Browser storage estimate: ${(storageEstimate.usage / (1024 * 1024)).toFixed(1)} MB used of ${(storageEstimate.quota / (1024 * 1024)).toFixed(0)} MB available for this origin.` : 'Browser storage quota estimates are unavailable in this browser; core localStorage checks are available above.'}</span></div>
           <p className="qbd-safety-note"><ShieldCheck size={14} /> These tools never delete your progress or change Firebase data. A cloud test only reads your own profile document.</p>
         </div>

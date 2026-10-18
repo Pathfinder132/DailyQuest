@@ -3,7 +3,7 @@ import { Activity, BookOpen, CalendarCheck, CheckCircle2, Cloud, Download, Flame
 import { formatDateTime, getLevelInfo, localDateKey } from '../lib/utils.js';
 import QuestionBankDiagnostics from './QuestionBankDiagnostics.jsx';
 
-export default function StatsPanel({ store, streak, level, petLevel, onOpenImport, onExport, syncMode = 'local', questions = [], builtInQuestions = [], authStatus = 'unknown', firebaseConfigured = false, cloudSyncStatus = 'local', onTestCloud }) {
+export default function StatsPanel({ view = 'sidebar', store, streak, level, petLevel, onOpenImport, onExport, syncMode = 'local', questions = [], builtInQuestions = [], authStatus = 'unknown', firebaseConfigured = false, cloudSyncStatus = 'local', onTestCloud }) {
   const levelProgress = getLevelInfo(store.stats.xp, store.stats.leveling);
   const history = [...store.history].reverse();
   const correct = store.history.filter((attempt) => attempt.isCorrect).length;
@@ -19,7 +19,7 @@ export default function StatsPanel({ store, streak, level, petLevel, onOpenImpor
   }
 
   return (
-    <aside className="stats-column">
+    <aside className={`stats-column ${view === 'analytics' ? 'stats-column-analytics' : ''}`}>
       <section className="side-card xp-card">
         <div className="side-card-top"><span className="side-icon xp-icon"><Sparkles size={17} /></span><span className="tiny-kicker">YOUR PLAYER CARD</span><span className="level-chip">LVL {level}</span></div>
         <div className="xp-total"><strong>{store.stats.xp.toLocaleString()}</strong><span>XP</span></div>
@@ -65,6 +65,7 @@ export default function StatsPanel({ store, streak, level, petLevel, onOpenImpor
       </section>
 
       <QuestionBankDiagnostics
+        mode={view === 'analytics' ? 'inventory' : 'all'}
         questions={questions}
         builtInQuestions={builtInQuestions}
         customQuestions={store.customQuestions}

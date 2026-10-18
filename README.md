@@ -13,6 +13,7 @@ Meet your pixel companion, solve a quick challenge, review the explanation, and 
 - **Personal question banks:** Import JSON banks, review counts by Core, Math & Aptitude, and Project-Based tracks, and export your progress.
 - **Troubleshooting toolkit:** Run safe checks for question IDs, saved history, browser storage, audio support, authentication, and cloud access; download a privacy-conscious diagnostic report.
 - **Google sign-in:** Keep your profile, question history, progress, and imported questions synced with Firebase across devices.
+- **Workspace navigation:** Separate Home, Analytics, and Diagnostics views keep the daily question focused and put deeper stats/tools on their own pages.
 - **Responsive design:** Use the app on desktop, tablet, or mobile.
 
 ## Getting Started

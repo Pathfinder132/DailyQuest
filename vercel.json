@@ -4,6 +4,22 @@
     {
       "source": "/__/auth/:path*",
       "destination": "https://dailyquest-6fbb3.firebaseapp.com/__/auth/:path*"
+    },
+    {
+      "source": "/analytics",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/analytics/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/diagnostics",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/diagnostics/:path*",
+      "destination": "/index.html"
     }
   ]
 }

@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import confetti from 'canvas-confetti';
-import { Cloud, Flame, Lightbulb, LogOut, RefreshCw, Sparkles } from 'lucide-react';
+import { Activity, BarChart3, Cloud, Flame, Home as HomeIcon, Lightbulb, LogOut, RefreshCw, Sparkles, Wrench } from 'lucide-react';
 import { DEFAULT_QUESTIONS } from './data/questions.js';
 import PixelPet from './components/PixelPet.jsx';
 import QuestionCard from './components/QuestionCard.jsx';
 import StatsPanel from './components/StatsPanel.jsx';
+import QuestionBankDiagnostics from './components/QuestionBankDiagnostics.jsx';
 import JsonImportDrawer from './components/JsonImportDrawer.jsx';
 import AuthScreen from './components/AuthScreen.jsx';
 import { EMPTY_STORE, exportProgress, getLegacyMigrationUid, getUserStorageKey, mergeStores, readStore, setLegacyMigrationUid, writeStore } from './lib/storage.js';
@@ -77,8 +78,26 @@ function friendlyFirebaseError(error) {
   return error?.message || 'Something went wrong while connecting to Firebase. Check your configuration and try again.';
 }
 
+function pageFromPath(pathname = '/') {
+  if (pathname === '/analytics' || pathname.startsWith('/analytics/')) return 'analytics';
+  if (pathname === '/diagnostics' || pathname.startsWith('/diagnostics/')) return 'diagnostics';
+  return 'home';
+}
+
+const PAGE_PATHS = { home: '/', analytics: '/analytics', diagnostics: '/diagnostics' };
+
+function safeRuntimeError(value) {
+  return String(value ?? 'Unknown browser error')
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email redacted]')
+    .replace(/(access_token|id_token|refresh_token|oauth_token|code)=([^&\s]+)/gi, '$1=[redacted]')
+    .replace(/https?:\/\/[^\s]+/gi, '[URL redacted]')
+    .slice(0, 220);
+}
+
 export default function App() {
   const [store, setStore] = useState(() => ensureLevelingProfile(readStore()));
+  const [activePage, setActivePage] = useState(() => pageFromPath(window.location.pathname));
+  const [sessionRuntimeErrors, setSessionRuntimeErrors] = useState([]);
   const [authStatus, setAuthStatus] = useState(() => isFirebaseConfigured() ? 'checking' : 'unconfigured');
   const [authUser, setAuthUser] = useState(null);
   const [authError, setAuthError] = useState('');
@@ -125,6 +144,37 @@ export default function App() {
   const [showImport, setShowImport] = useState(false);
   const [toast, setToast] = useState('');
   const [levelUpCelebrations, setLevelUpCelebrations] = useState([]);
+
+  useEffect(() => {
+    const labels = { home: 'DailyQuest', analytics: 'Analytics · DailyQuest', diagnostics: 'Diagnostics · DailyQuest' };
+    document.title = labels[activePage] || 'DailyQuest';
+  }, [activePage]);
+
+  useEffect(() => {
+    const addRuntimeError = (message) => setSessionRuntimeErrors((previous) => [
+      ...previous,
+      { at: new Date().toISOString(), message: safeRuntimeError(message) },
+    ].slice(-20));
+    const onError = (event) => addRuntimeError(event?.error?.message || event?.message || 'Uncaught browser error');
+    const onRejection = (event) => addRuntimeError(event?.reason?.message || event?.reason || 'Unhandled promise rejection');
+    const onPopState = () => setActivePage(pageFromPath(window.location.pathname));
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onRejection);
+    window.addEventListener('popstate', onPopState);
+    return () => {
+      window.removeEventListener('error', onError);
+      window.removeEventListener('unhandledrejection', onRejection);
+      window.removeEventListener('popstate', onPopState);
+    };
+  }, []);
+
+  function navigateToPage(page) {
+    const safePage = PAGE_PATHS[page] ? page : 'home';
+    const destination = PAGE_PATHS[safePage];
+    if (window.location.pathname !== destination) window.history.pushState({ dailyQuestPage: safePage }, '', destination);
+    setActivePage(safePage);
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }
 
   const allQuestions = useMemo(() => [...DEFAULT_QUESTIONS, ...store.customQuestions], [store.customQuestions]);
   const displayQuestion = useMemo(() => currentQuestion ? { ...currentQuestion, options: displayedOptions } : currentQuestion, [currentQuestion, displayedOptions]);
@@ -575,6 +625,7 @@ export default function App() {
     try {
       await signOutCurrentUser();
       setAuthError('');
+      navigateToPage('home');
     } catch (error) {
       setToast(`Could not sign out: ${friendlyFirebaseError(error)}`);
     }
@@ -600,111 +651,146 @@ export default function App() {
   const displayInitial = (displayName || authUser?.email || 'U').slice(0, 1).toUpperCase();
   const statusLabel = potdSolved ? 'POTD SOLVED FOR TODAY!' : 'POTD PENDING FOR TODAY';
 
+  const analyticsProps = {
+    store,
+    streak,
+    level,
+    petLevel,
+    onOpenImport: () => setShowImport(true),
+    onExport: handleExport,
+    syncMode: isCloudUser ? 'cloud' : 'local',
+    questions: allQuestions,
+    builtInQuestions: DEFAULT_QUESTIONS,
+    authStatus,
+    firebaseConfigured: isFirebaseConfigured(),
+    cloudSyncStatus,
+    onTestCloud: isCloudUser ? handleDiagnosticCloudCheck : null,
+  };
+
   return (
-    <div className="app-shell">
-      <div className="floating-controls" aria-label="Account and daily streak">
-        {isCloudUser ? (
-          <div className="auth-user-chip" title={authUser.email || authUser.displayName || 'Signed-in Google account'}>
-            <span className="auth-user-avatar">{authUser.photoURL ? <img src={authUser.photoURL} alt="" referrerPolicy="no-referrer" /> : displayInitial}</span>
-            <span className="auth-user-copy"><strong>{displayLabel}</strong><small className={cloudSyncStatus === 'error' ? 'sync-error-text' : ''}>{cloudSyncStatus === 'synced' ? 'CLOUD SYNCED' : cloudSyncStatus === 'syncing' ? 'SYNCING…' : cloudSyncStatus === 'error' ? 'SYNC ISSUE' : 'GOOGLE ACCOUNT'}</small></span>
-            {cloudSyncStatus === 'error' && <button type="button" className="auth-sync-retry" onClick={handleRetryCloudSync} title={authError || 'Retry cloud sync'} aria-label="Retry cloud sync"><RefreshCw size={13} /></button>}
-            <button type="button" className="auth-signout-button" onClick={handleSignOut} title="Sign out" aria-label="Sign out"><LogOut size={17} strokeWidth={2.5} /></button>
+    <div className={`app-shell app-shell-authenticated page-${activePage}`}>
+      <header className="app-top-nav">
+        <div className="app-top-nav-inner">
+          <div className="nav-brand" aria-label="DailyQuest Engineering Warm-Up">
+            <span className="brand-mark"><span>U</span><i>✦</i></span>
+            <span className="brand-copy"><strong>DAILY QUEST</strong><span>ENGINEERING WARM-UP / PERSONAL CLOUD</span></span>
           </div>
-        ) : (
-          <button type="button" className="auth-mini-chip" onClick={openGoogleSignIn} title="Sign in to sync across devices"><Cloud size={15} /><span>Sign in to sync</span></button>
-        )}
-        <div className="floating-streak-wrap" aria-label="Daily streak">
-          <div className="header-streak" aria-label={`${streak} day streak`}>
-            <span className="header-streak-icon"><Flame size={19} fill="currentColor" /></span>
-            <span className="header-streak-label">DAY STREAK</span>
-            <strong>{streak}</strong>
-            <small>{streak === 1 ? 'DAY' : 'DAYS'}</small>
+
+          <nav className="primary-nav" aria-label="Main navigation">
+            <button type="button" className={`nav-link ${activePage === 'home' ? 'nav-link-active' : ''}`} aria-current={activePage === 'home' ? 'page' : undefined} onClick={() => navigateToPage('home')}><HomeIcon size={16} /><span>Home</span></button>
+            <button type="button" className={`nav-link ${activePage === 'analytics' ? 'nav-link-active' : ''}`} aria-current={activePage === 'analytics' ? 'page' : undefined} onClick={() => navigateToPage('analytics')}><BarChart3 size={16} /><span>Analytics</span></button>
+            <button type="button" className={`nav-link ${activePage === 'diagnostics' ? 'nav-link-active' : ''}`} aria-current={activePage === 'diagnostics' ? 'page' : undefined} onClick={() => navigateToPage('diagnostics')}><Wrench size={16} /><span>Diagnostics</span></button>
+          </nav>
+
+          <div className="app-header-controls" aria-label="Account and daily streak">
+            {isCloudUser ? (
+              <div className="auth-user-chip" title={authUser.email || authUser.displayName || 'Signed-in Google account'}>
+                <span className="auth-user-avatar">{authUser.photoURL ? <img src={authUser.photoURL} alt="" referrerPolicy="no-referrer" /> : displayInitial}</span>
+                <span className="auth-user-copy"><strong>{displayLabel}</strong><small className={cloudSyncStatus === 'error' ? 'sync-error-text' : ''}>{cloudSyncStatus === 'synced' ? 'CLOUD SYNCED' : cloudSyncStatus === 'syncing' ? 'SYNCING…' : cloudSyncStatus === 'error' ? 'SYNC ISSUE' : 'GOOGLE ACCOUNT'}</small></span>
+                {cloudSyncStatus === 'error' && <button type="button" className="auth-sync-retry" onClick={handleRetryCloudSync} title={authError || 'Retry cloud sync'} aria-label="Retry cloud sync"><RefreshCw size={13} /></button>}
+                <button type="button" className="auth-signout-button" onClick={handleSignOut} title="Sign out" aria-label="Sign out"><LogOut size={17} strokeWidth={2.5} /></button>
+              </div>
+            ) : (
+              <button type="button" className="auth-mini-chip" onClick={openGoogleSignIn} title="Sign in to sync across devices"><Cloud size={15} /><span>Sign in to sync</span></button>
+            )}
+            <div className="header-streak" aria-label={`${streak} day streak`}>
+              <span className="header-streak-icon"><Flame size={19} fill="currentColor" /></span>
+              <span className="header-streak-label">DAY STREAK</span>
+              <strong>{streak}</strong>
+              <small>{streak === 1 ? 'DAY' : 'DAYS'}</small>
+            </div>
           </div>
         </div>
-      </div>
+      </header>
 
-      <main className="app-main">
-        <section className="welcome-row">
-          <div className="welcome-copy">
-            <div className="welcome-kicker"><span className="kicker-line" /> YOUR DAILY BRAIN GYM <span className="kicker-line" /></div>
-            <h1>{displayName ? `${displayName}, solve this question` : 'Solve this question'}<br className="desktop-break" /> and <span>start your day!</span></h1>
-            <p>One question. A sharper brain. Zero excuses. <span className="sun-scribble">✳</span></p>
-          </div>
-          <div className={`potd-status ${potdSolved ? 'potd-status-solved' : 'potd-status-pending'}`}>
-            <div className="status-burst">{potdSolved ? '✓' : '🔥'}</div>
-            <div className="status-copy"><span>PROBLEM OF THE DAY</span><strong>{statusLabel}</strong><small>{potdSolved ? 'Daily mission complete. Keep the streak warm.' : 'Your daily mission is waiting.'}</small></div>
-            <div className="status-sparkle">✦</div>
-          </div>
-        </section>
-
-        <div className="dashboard-grid">
-          <section className="main-column" aria-label="Daily engineering question">
-            <div className="question-section-heading">
-              <div className="section-number">01</div>
-              <div><p className="eyebrow">THE DAILY CHALLENGE</p><h2>{isPotd ? 'Problem of the day' : isMathAptitudeQuestion(currentQuestion) ? 'Math & aptitude challenge' : 'Bonus brain rep'}</h2></div>
-              <div className="question-heading-doodle">✳</div>
-            </div>
-
-            <QuestionCard
-              key={`${currentQuestion?.id}-${optionShuffleRevision}`}
-              question={displayQuestion}
-              selectedOptionId={selectedOptionId}
-              earnedXp={selectedState?.xpEarned ?? 0}
-              isRepeatSolve={Boolean(selectedState?.isRepeatSolve)}
-              isLocked={isLocked}
-              isPotd={isPotd}
-              potdSolved={potdSolved}
-              onAnswer={handleAnswer}
-              onRandomize={handleRandomize}
-              onReturnToPotd={handleReturnToPotd}
-              onGenerateMath={handleGenerateMath}
-              randomizing={randomizing}
-            />
-          </section>
-
-          <aside className="companion-column" aria-label="Your pixel companion">
-            <section className="companion-panel">
-              <div className="companion-panel-top">
-                <span className="companion-star"><Sparkles size={18} /></span>
-                <div><p className="eyebrow">YOUR PIXEL PARTNER</p><h2>Brain buddy</h2></div>
-                <span className="companion-level-chip">LVL {petLevel}</span>
+      <main className={`app-main app-main-${activePage}`}>
+        {activePage === 'home' && (
+          <div className="home-page">
+            <section className="welcome-row">
+              <div className="welcome-copy">
+                <div className="welcome-kicker"><span className="kicker-line" /> YOUR DAILY BRAIN GYM <span className="kicker-line" /></div>
+                <h1>{displayName ? `${displayName}, solve this question` : 'Solve this question'}<br className="desktop-break" /> and <span>start your day!</span></h1>
+                <p>One question. A sharper brain. Zero excuses. <span className="sun-scribble">✳</span></p>
               </div>
-              <PixelPet mood={petMood} level={petLevel} messageIndex={petMessageIndex} userName={displayName} />
-              <div className="companion-level-progress">
-                <div className="companion-progress-copy"><span>COMPANION EVOLUTION</span><strong>{store.stats.totalCorrect % 10}/10 <em>correct</em></strong></div>
-                <div className="companion-progress-track"><span style={{ width: `${(store.stats.totalCorrect % 10) * 10}%` }} /></div>
-                <p>Every 10 correct answers unlocks the next pet level.</p>
+              <div className={`potd-status ${potdSolved ? 'potd-status-solved' : 'potd-status-pending'}`}>
+                <div className="status-burst">{potdSolved ? '✓' : '🔥'}</div>
+                <div className="status-copy"><span>PROBLEM OF THE DAY</span><strong>{statusLabel}</strong><small>{potdSolved ? 'Daily mission complete. Keep the streak warm.' : 'Your daily mission is waiting.'}</small></div>
+                <div className="status-sparkle">✦</div>
               </div>
             </section>
-          </aside>
-        </div>
 
-        <StatsPanel
-          store={store}
-          streak={streak}
-          level={level}
-          petLevel={petLevel}
-          onOpenImport={() => setShowImport(true)}
-          onExport={handleExport}
-          syncMode={isCloudUser ? 'cloud' : 'local'}
-          questions={allQuestions}
-          builtInQuestions={DEFAULT_QUESTIONS}
-          authStatus={authStatus}
-          firebaseConfigured={isFirebaseConfigured()}
-          cloudSyncStatus={cloudSyncStatus}
-          onTestCloud={isCloudUser ? handleDiagnosticCloudCheck : null}
-        />
+            <div className="dashboard-grid">
+              <section className="main-column" aria-label="Daily engineering question">
+                <div className="question-section-heading">
+                  <div className="section-number">01</div>
+                  <div><p className="eyebrow">THE DAILY CHALLENGE</p><h2>{isPotd ? 'Problem of the day' : isMathAptitudeQuestion(currentQuestion) ? 'Math & aptitude challenge' : 'Bonus brain rep'}</h2></div>
+                  <div className="question-heading-doodle">✳</div>
+                </div>
 
-        <div className="bottom-banner">
-          <div className="banner-icon"><Lightbulb size={24} /></div>
-          <div><strong>SMALL REPS. BIG ENGINEER ENERGY.</strong><p>Consistency beats cramming. Come back tomorrow to protect your streak.</p></div>
-          <div className="banner-sticker">YOU<br />GOT<br />THIS! <span>↗</span></div>
-        </div>
+                <QuestionCard
+                  key={`${currentQuestion?.id}-${optionShuffleRevision}`}
+                  question={displayQuestion}
+                  selectedOptionId={selectedOptionId}
+                  earnedXp={selectedState?.xpEarned ?? 0}
+                  isRepeatSolve={Boolean(selectedState?.isRepeatSolve)}
+                  isLocked={isLocked}
+                  isPotd={isPotd}
+                  potdSolved={potdSolved}
+                  onAnswer={handleAnswer}
+                  onRandomize={handleRandomize}
+                  onReturnToPotd={handleReturnToPotd}
+                  onGenerateMath={handleGenerateMath}
+                  randomizing={randomizing}
+                />
+              </section>
 
-        <footer className="app-footer">
-          <div className="footer-brand"><span className="footer-dot">✦</span> BUILT FOR THE LONG GAME <span className="footer-divider">/</span> <span>DAILYQUEST / ENGINEERING WARM-UP</span></div>
-          <div className="footer-right"><span><span className="storage-dot" /> {isCloudUser ? 'Cloud profile active' : 'Local progress on'}</span><strong>{isCloudUser ? (cloudSyncStatus === 'error' ? ' SYNC RETRY NEEDED' : ' YOUR ACCOUNT') : ' THIS DEVICE'}</strong><span className="footer-heart">♥</span></div>
-        </footer>
+              <aside className="companion-column" aria-label="Your pixel companion">
+                <section className="companion-panel">
+                  <div className="companion-panel-top">
+                    <span className="companion-star"><Sparkles size={18} /></span>
+                    <div><p className="eyebrow">YOUR PIXEL PARTNER</p><h2>Brain buddy</h2></div>
+                    <span className="companion-level-chip">LVL {petLevel}</span>
+                  </div>
+                  <PixelPet mood={petMood} level={petLevel} messageIndex={petMessageIndex} userName={displayName} />
+                  <div className="companion-level-progress">
+                    <div className="companion-progress-copy"><span>COMPANION EVOLUTION</span><strong>{store.stats.totalCorrect % 10}/10 <em>correct</em></strong></div>
+                    <div className="companion-progress-track"><span style={{ width: `${(store.stats.totalCorrect % 10) * 10}%` }} /></div>
+                    <p>Every 10 correct answers unlocks the next pet level.</p>
+                  </div>
+                </section>
+              </aside>
+            </div>
+          </div>
+        )}
+
+        {activePage === 'analytics' && (
+          <section className="section-page analytics-page" aria-labelledby="analytics-page-title">
+            <div className="page-heading"><span className="page-heading-icon"><BarChart3 size={20} /></span><div><p className="eyebrow">YOUR PRACTICE, MEASURED</p><h1 id="analytics-page-title">Analytics &amp; Progress</h1><p>XP, consistency, accuracy, recent answers, and everything in your question bank.</p></div></div>
+            <div className="page-scroll-area analytics-scroll">
+              <StatsPanel view="analytics" {...analyticsProps} />
+            </div>
+          </section>
+        )}
+
+        {activePage === 'diagnostics' && (
+          <section className="section-page diagnostics-page" aria-labelledby="diagnostics-page-title">
+            <div className="page-heading"><span className="page-heading-icon"><Wrench size={20} /></span><div><p className="eyebrow">SYSTEM HEALTH</p><h1 id="diagnostics-page-title">Diagnostics &amp; Troubleshooting</h1><p>Inspect your question data, browser storage, audio support, account state and cloud access.</p></div></div>
+            <div className="page-scroll-area diagnostics-scroll">
+              <QuestionBankDiagnostics
+                mode="diagnostics"
+                questions={allQuestions}
+                builtInQuestions={DEFAULT_QUESTIONS}
+                customQuestions={store.customQuestions}
+                store={store}
+                authStatus={authStatus}
+                cloudSyncStatus={cloudSyncStatus}
+                firebaseConfigured={isFirebaseConfigured()}
+                onTestCloud={isCloudUser ? handleDiagnosticCloudCheck : null}
+                externalRuntimeErrors={sessionRuntimeErrors}
+              />
+            </div>
+          </section>
+        )}
       </main>
 
       <JsonImportDrawer open={showImport} onClose={() => setShowImport(false)} existingQuestions={allQuestions} onImport={handleImport} />
