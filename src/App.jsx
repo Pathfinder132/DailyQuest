@@ -379,6 +379,16 @@ export default function App() {
   }
 
   function scrollPageToTop() {
+    // On mobile/tablet, preserve the current scroll position so changing questions
+    // doesn't pull the user away from the question area. Desktop keeps the top reset.
+    if (window.matchMedia('(max-width: 900px)').matches) {
+      const currentScrollY = window.scrollY;
+      window.requestAnimationFrame(() => {
+        window.scrollTo({ top: currentScrollY, left: 0, behavior: 'auto' });
+      });
+      return;
+    }
+
     window.requestAnimationFrame(() => {
       window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
     });
