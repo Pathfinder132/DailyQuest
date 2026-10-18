@@ -111,7 +111,22 @@ export function mergeStores(...inputStores) {
   for (const store of stores) {
     for (const attempt of store.history || []) {
       const id = String(attempt?.id || `${attempt?.questionId || 'attempt'}_${attempt?.timestamp || Math.random()}`);
-      if (!attemptsById.has(id)) attemptsById.set(id, { ...attempt, id });
+      const incoming = { ...attempt, id };
+      const existing = attemptsById.get(id);
+      if (!existing) {
+        attemptsById.set(id, incoming);
+        continue;
+      }
+      // A live cloud snapshot can briefly contain the pending version of an attempt
+      // while the local copy already has its confidence choice. Never let that older
+      // pending copy erase the finalized XP/confidence record during a merge.
+      const existingFinalized = Boolean(existing.confidenceStatus || existing.confidenceAppliedAt);
+      const incomingFinalized = Boolean(incoming.confidenceStatus || incoming.confidenceAppliedAt);
+      const existingStamp = Number(existing.confidenceAppliedAt || existing.updatedAt || existing.timestamp || 0);
+      const incomingStamp = Number(incoming.confidenceAppliedAt || incoming.updatedAt || incoming.timestamp || 0);
+      if ((incomingFinalized && !existingFinalized) || (incomingFinalized === existingFinalized && incomingStamp >= existingStamp)) {
+        attemptsById.set(id, incoming);
+      }
     }
     for (const question of store.customQuestions || []) {
       if (!question?.id) continue;

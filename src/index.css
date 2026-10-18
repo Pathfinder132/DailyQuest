@@ -2282,3 +2282,61 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #15b8d2; outli
   .home-page #question-card-start .solution-code { font-size: 13px; }
   .home-page #question-card-start .takeaway-box p { font-size: 12px; line-height: 1.55; }
 }
+
+
+/* Typed recall, confidence self-assessment and difficulty targeting. */
+.question-type-tag { display:inline-flex; align-items:center; min-height:25px; padding:5px 9px; border-radius:7px; color:#174e63; background:#dff7ff; border:1px solid #9bdfee; font:700 10px 'DM Mono',monospace; letter-spacing:.035em; }
+.difficulty-tag.difficulty-easy { color:#11664c; background:#e3fff3; border-color:#a4e7ca; }
+.difficulty-tag.difficulty-medium { color:#6c4a00; background:#fff5c7; border-color:#ead56b; }
+.difficulty-tag.difficulty-hard { color:#9b203f; background:#ffe6eb; border-color:#ffb8c7; }
+.fill-answer-form { display:flex; flex-direction:column; gap:9px; padding:clamp(13px,1.2vw,20px); border:1.5px solid #a995ef; border-radius:14px; background:linear-gradient(135deg,#f3edff,#fff 72%); box-shadow:0 2px 0 rgba(41,25,67,.07); }
+.fill-answer-label { color:#342348; font-size:clamp(14px,1vw,17px); font-weight:850; }
+.fill-answer-input { width:100%; min-height:clamp(49px,4.3vw,64px); padding:12px 15px; border:2px solid #5940a6; border-radius:10px; outline:none; background:#fff; color:#211634; box-shadow:inset 0 1px 3px rgba(37,21,59,.08); font-size:clamp(17px,1.35vw,22px); font-weight:700; }
+.fill-answer-input::placeholder { color:#82768f; opacity:1; }
+.fill-answer-input:focus { border-color:#12a4bc; box-shadow:0 0 0 4px rgba(18,164,188,.16); }
+.fill-answer-input:disabled { background:#f9f7ff; color:#37244d; }
+.fill-answer-footer { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+.fill-answer-hint { color:#5c506b; font-size:11px; font-weight:600; }
+.fill-answer-submit { display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:42px; padding:9px 15px; border:1.5px solid #24183a; border-radius:9px; background:#6b35f4; color:#fff; box-shadow:0 3px 0 #24183a; font-size:12px; font-weight:850; cursor:pointer; }
+.fill-answer-submit:hover:not(:disabled) { background:#5822e7; transform:translateY(-1px); }
+.fill-answer-submit:disabled { cursor:not-allowed; opacity:.5; box-shadow:none; }
+.confidence-assessment { margin-top:17px; padding:15px; border:1.5px solid #d9cef8; border-radius:13px; background:linear-gradient(115deg,#f5f0ff,#fff 65%,#effffb); }
+.confidence-heading { display:flex; align-items:center; gap:9px; margin-bottom:11px; color:#4f2ba9; }
+.confidence-heading > div { display:flex; flex-direction:column; gap:2px; }
+.confidence-heading strong { color:#2f2147; font-size:14px; font-weight:900; }
+.confidence-heading span { color:#665a78; font-size:11px; }
+.confidence-buttons { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.confidence-button { display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:5px; min-height:64px; padding:11px 13px; border:1.5px solid #3a2c4f; border-radius:10px; text-align:left; cursor:pointer; transition:transform .14s,box-shadow .14s; }
+.confidence-button:hover { transform:translateY(-2px); box-shadow:0 3px 0 rgba(35,21,55,.22); }
+.confidence-explicit { color:#124d3a; background:#e4fff3; border-color:#72cfae; }
+.confidence-shaky { color:#624200; background:#fff5c7; border-color:#e6c34e; }
+.confidence-button-title { font-size:clamp(12px,.9vw,14px); line-height:1.28; font-weight:900; }
+.confidence-button small { font-size:11px; font-weight:750; opacity:.9; }
+.confidence-saved { display:flex; align-items:flex-start; gap:8px; padding:11px 12px; border-radius:9px; font-size:12px; line-height:1.45; font-weight:800; }
+.confidence-saved-explicit { color:#155c44; background:#e1fff1; border:1px solid #8cd9bb; }
+.confidence-saved-shaky { color:#71500a; background:#fff5c6; border:1px solid #ecd469; }
+.difficulty-filter-control { display:inline-flex; align-items:center; gap:4px; flex-wrap:wrap; padding:3px; border:1px solid #ded5ef; border-radius:10px; background:#f8f5ff; }
+.difficulty-filter-control > span { padding:0 5px; color:#685a7e; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; }
+.difficulty-filter-control button { display:inline-flex; align-items:center; gap:4px; min-height:30px; padding:6px 9px; border:1px solid transparent; border-radius:7px; background:transparent; color:#514164; font-size:10px; font-weight:850; cursor:pointer; }
+.difficulty-filter-control button small { display:inline-grid; place-items:center; min-width:18px; min-height:18px; padding:0 4px; border-radius:20px; background:#eee6ff; color:#4f28b6; font-size:9px; }
+.difficulty-filter-control button.difficulty-filter-active { background:#6b35f4; color:#fff; border-color:#352050; box-shadow:0 1px 0 #352050; }
+.difficulty-filter-control button.difficulty-filter-active small { color:#38225a; background:#f9f35a; }
+.confidence-analytics-card { padding:17px; }
+.confidence-analytics-icon { display:grid; place-items:center; width:36px; height:36px; border-radius:10px; color:#6740c5; background:#f0e9ff; }
+.confidence-analytics-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px; margin-top:14px; }
+.confidence-analytics-metric { display:flex; flex-direction:column; align-items:flex-start; gap:6px; min-width:0; padding:12px; border:1px solid #e5deef; border-radius:10px; background:#fff; }
+.confidence-analytics-metric strong { color:#27193e; font-size:24px; line-height:1; font-weight:950; }
+.confidence-analytics-metric span { color:#5e526f; font-size:10px; font-weight:750; }
+.confidence-metric-mastered svg { color:#14845e; }
+.confidence-metric-review svg { color:#bd5b23; }
+.confidence-metric-shaky svg { color:#9a7500; }
+@media (max-width: 700px) {
+  .confidence-buttons { grid-template-columns:minmax(0,1fr); }
+  .confidence-button { min-height:58px; }
+  .confidence-analytics-grid { gap:6px; }
+  .confidence-analytics-metric { padding:9px; }
+  .confidence-analytics-metric strong { font-size:21px; }
+  .confidence-analytics-metric span { font-size:9px; }
+  .difficulty-filter-control { width:100%; justify-content:flex-start; }
+  .action-buttons .difficulty-filter-control { flex:1 1 100%; }
+}

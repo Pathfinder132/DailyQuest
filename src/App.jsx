@@ -9,8 +9,8 @@ import QuestionBankDiagnostics from './components/QuestionBankDiagnostics.jsx';
 import JsonImportDrawer from './components/JsonImportDrawer.jsx';
 import AuthScreen from './components/AuthScreen.jsx';
 import { EMPTY_STORE, exportProgress, getLegacyMigrationUid, getUserStorageKey, mergeStores, readStore, setLegacyMigrationUid, writeStore } from './lib/storage.js';
-import { isMathAptitudeQuestion, makeMentalMathQuestion, pickMathAptitudeQuestion } from './lib/questionTools.js';
-import { calculateStreak, ensureLevelingProfile, getDailyQuestion, getLastDisplayedOptionOrder, getLevelInfo, localDateKey, makeId, pickQuestionWithActiveRecall, calculateQuestionReward, shuffleOptionsForDisplay } from './lib/utils.js';
+import { isHardOrSnippetQuestion, isMathAptitudeQuestion, makeMentalMathQuestion, pickMathAptitudeQuestion } from './lib/questionTools.js';
+import { applyConfidenceAssessment, calculateStreak, ensureLevelingProfile, evaluateFillInBlankAnswer, getDailyQuestion, getLastDisplayedOptionOrder, getLevelInfo, isFillInBlankQuestion, localDateKey, makeId, pickQuestionWithActiveRecall, calculateQuestionReward, shuffleOptionsForDisplay } from './lib/utils.js';
 import { playUiSound } from './lib/sounds.js';
 import { isFirebaseConfigured, saveUserStoreToCloud, signInWithGoogle, signOutCurrentUser, subscribeToAuthChanges, subscribeToUserCloudStore, syncAttemptToFirestore, syncQuestionsToFirestore, syncRecentQuestionTrailToFirestore, checkUserCloudProfile } from './lib/firebaseSync.js';
 
@@ -40,6 +40,46 @@ function popLevelUpConfetti(events) {
 function getTodayAttempt(store, questionId) {
   const today = localDateKey();
   return [...store.history].reverse().find((attempt) => attempt.questionId === questionId && attempt.dateKey === today);
+}
+
+function getLatestPendingConfidenceAttempt(store) {
+  return [...(store?.history || [])].reverse().find((attempt) => (
+    attempt?.id && attempt?.questionSnapshot?.id && Number.isFinite(attempt.baseXpEarned)
+    && !['explicit', 'shaky'].includes(attempt.confidenceStatus)
+    && !attempt.confidenceAppliedAt
+  )) || null;
+}
+
+function makeAnswerStateFromAttempt(attempt) {
+  if (!attempt) return null;
+  const hasConfidenceWorkflow = Number.isFinite(attempt.baseXpEarned);
+  return {
+    optionId: attempt.selectedOptionId ?? null,
+    response: attempt.response ?? '',
+    isCorrect: Boolean(attempt.isCorrect),
+    xpEarned: Number(attempt.xpEarned || 0),
+    baseXpEarned: Number(attempt.baseXpEarned ?? attempt.xpEarned ?? 0),
+    isRepeatSolve: Boolean(attempt.isRepeatSolve),
+    alreadyAttempted: true,
+    attemptId: attempt.id,
+    confidenceStatus: attempt.confidenceStatus || null,
+    requiresConfidence: hasConfidenceWorkflow && !attempt.confidenceStatus && !attempt.confidenceAppliedAt,
+    confidenceEligible: hasConfidenceWorkflow,
+  };
+}
+
+function restoreDisplayedOptions(question, attempt, history) {
+  if (!question) return [];
+  const sourceOptions = Array.isArray(question.options) ? question.options : [];
+  const storedIds = Array.isArray(attempt?.displayedOptionIds) ? attempt.displayedOptionIds.map(String) : [];
+  if (!sourceOptions.length) return [];
+  if (storedIds.length) {
+    const byId = new Map(sourceOptions.map((option) => [String(option.id), option]));
+    const ordered = storedIds.map((id) => byId.get(id)).filter(Boolean);
+    for (const option of sourceOptions) if (!ordered.includes(option)) ordered.push(option);
+    return ordered.map((option, index) => ({ ...option, displayLabel: String.fromCharCode(65 + index) }));
+  }
+  return shuffleOptionsForDisplay(question, getLastDisplayedOptionOrder(history, question));
 }
 
 
@@ -104,13 +144,15 @@ export default function App() {
   const [signInBusy, setSignInBusy] = useState(false);
   const [authRetry, setAuthRetry] = useState(0);
   const [cloudSyncStatus, setCloudSyncStatus] = useState('local');
+  const [difficultyFilter, setDifficultyFilter] = useState('all');
   const isCloudUser = authStatus === 'signed-in' && Boolean(authUser?.uid);
   const todayKey = localDateKey();
   const dailyQuestion = useMemo(() => getDailyQuestion(DEFAULT_QUESTIONS, todayKey), [todayKey]);
-  const [currentQuestion, setCurrentQuestion] = useState(() => getDailyQuestion(DEFAULT_QUESTIONS, localDateKey()));
+  const [currentQuestion, setCurrentQuestion] = useState(() => getLatestPendingConfidenceAttempt(store)?.questionSnapshot || getDailyQuestion(DEFAULT_QUESTIONS, localDateKey()));
   const [displayedOptions, setDisplayedOptions] = useState(() => {
-    const initialQuestion = getDailyQuestion(DEFAULT_QUESTIONS, localDateKey());
-    return shuffleOptionsForDisplay(initialQuestion, getLastDisplayedOptionOrder(store.history, initialQuestion));
+    const pending = getLatestPendingConfidenceAttempt(store);
+    const initialQuestion = pending?.questionSnapshot || getDailyQuestion(DEFAULT_QUESTIONS, localDateKey());
+    return restoreDisplayedOptions(initialQuestion, pending, store.history);
   });
   const [optionShuffleRevision, setOptionShuffleRevision] = useState(0);
   const [questionPresentationNonce, setQuestionPresentationNonce] = useState(0);
@@ -128,15 +170,9 @@ export default function App() {
     return orders;
   });
   const [currentAnswer, setCurrentAnswer] = useState(() => {
-    const initialQuestion = getDailyQuestion(DEFAULT_QUESTIONS, localDateKey());
-    const attempt = getTodayAttempt(store, initialQuestion?.id);
-    return attempt ? {
-      optionId: attempt.selectedOptionId,
-      isCorrect: attempt.isCorrect,
-      xpEarned: attempt.xpEarned ?? 0,
-      isRepeatSolve: Boolean(attempt.isRepeatSolve),
-      alreadyAttempted: true,
-    } : null;
+    const pending = getLatestPendingConfidenceAttempt(store);
+    const initialQuestion = pending?.questionSnapshot || getDailyQuestion(DEFAULT_QUESTIONS, localDateKey());
+    return makeAnswerStateFromAttempt(pending || getTodayAttempt(store, initialQuestion?.id));
   });
   const [petMood, setPetMood] = useState(() => {
     const attempt = getTodayAttempt(store, getDailyQuestion(DEFAULT_QUESTIONS, localDateKey())?.id);
@@ -192,18 +228,13 @@ export default function App() {
   const petLevel = Math.floor(store.stats.totalCorrect / 10) + 1;
 
   function restoreQuestionForProfile(profileStore) {
-    const nextDailyQuestion = getDailyQuestion(DEFAULT_QUESTIONS, localDateKey());
-    const savedAttempt = getTodayAttempt(profileStore, nextDailyQuestion?.id);
+    const pendingAttempt = getLatestPendingConfidenceAttempt(profileStore);
+    const nextDailyQuestion = pendingAttempt?.questionSnapshot || getDailyQuestion(DEFAULT_QUESTIONS, localDateKey());
+    const savedAttempt = pendingAttempt || getTodayAttempt(profileStore, nextDailyQuestion?.id);
     setCurrentQuestion(nextDailyQuestion);
-    setDisplayedOptions(shuffleOptionsForDisplay(nextDailyQuestion, getLastDisplayedOptionOrder(profileStore.history, nextDailyQuestion)));
+    setDisplayedOptions(restoreDisplayedOptions(nextDailyQuestion, savedAttempt, profileStore.history));
     setOptionShuffleRevision((revision) => revision + 1);
-    setCurrentAnswer(savedAttempt ? {
-      optionId: savedAttempt.selectedOptionId,
-      isCorrect: savedAttempt.isCorrect,
-      xpEarned: savedAttempt.xpEarned ?? 0,
-      isRepeatSolve: Boolean(savedAttempt.isRepeatSolve),
-      alreadyAttempted: true,
-    } : null);
+    setCurrentAnswer(makeAnswerStateFromAttempt(savedAttempt));
     setPetMood(savedAttempt ? (savedAttempt.isCorrect ? 'happy' : 'dizzy') : 'idle');
     const shownOrders = {};
     for (const attempt of profileStore.history || []) {
@@ -324,6 +355,15 @@ export default function App() {
     };
   }, [authRetry]);
 
+  // Reflect a confidence choice made on another device without awarding XP twice locally.
+  useEffect(() => {
+    if (!currentAnswer?.requiresConfidence || !currentAnswer.attemptId) return;
+    const latestAttempt = store.history.find((attempt) => attempt.id === currentAnswer.attemptId);
+    if (latestAttempt?.confidenceStatus || latestAttempt?.confidenceAppliedAt) {
+      setCurrentAnswer(makeAnswerStateFromAttempt(latestAttempt));
+    }
+  }, [store.history, currentAnswer?.attemptId, currentAnswer?.requiresConfidence]);
+
   // Keep a separate browser cache for each Google UID. Never write one account into another account's cache.
   useEffect(() => {
     if (isCloudUser) writeStore(store, getUserStorageKey(authUser.uid));
@@ -412,19 +452,13 @@ export default function App() {
     return () => window.clearTimeout(timeout);
   }, [levelUpCelebrations]);
 
-  function handleAnswer(optionId) {
+  function submitQuestionAnswer({ optionId = null, response, correct }) {
     if (!currentQuestion || currentAnswer) return;
-    const chosen = currentQuestion.options.find((option) => option.id === optionId);
-    if (!chosen) return;
-
-    const correct = optionId === currentQuestion.correctAnswer;
+    const baseReward = calculateQuestionReward(currentQuestion.id, store.history, correct);
     const timestamp = Date.now();
     const dateKey = localDateKey(new Date(timestamp));
-    const { xpEarned, wasPreviouslyAttempted: previouslyAttempted, isRepeatSolve } = calculateQuestionReward(
-      currentQuestion.id,
-      store.history,
-      correct,
-    );
+    const answeredText = String(response ?? '').trim();
+    if (!answeredText) return;
     const attempt = {
       id: makeId(),
       questionId: currentQuestion.id,
@@ -432,40 +466,56 @@ export default function App() {
       questionSnapshot: currentQuestion,
       displayedOptionIds: displayedOptions.map((option) => String(option.id)),
       category: currentQuestion.category,
-      response: chosen.text,
+      response: answeredText,
       selectedOptionId: optionId,
       correctAnswer: currentQuestion.correctAnswer,
-      isCorrect: correct,
+      isCorrect: Boolean(correct),
       timestamp,
       dateKey,
       source: currentQuestion.source || (isPotd ? 'potd' : 'question-bank'),
       isPotd,
-      xpEarned,
-      isRepeatSolve,
-      wasPreviouslyAttempted: previouslyAttempted,
+      // XP remains pending until the user records confidence; this prevents a refresh
+      // or repeated click from granting full XP before self-assessment is completed.
+      xpEarned: 0,
+      baseXpEarned: baseReward.xpEarned,
+      isRepeatSolve: baseReward.isRepeatSolve,
+      wasPreviouslyAttempted: baseReward.wasPreviouslyAttempted,
+      confidenceStatus: null,
+      confidenceAppliedAt: null,
+      confidenceMultiplier: null,
+      needsReview: !correct,
+      mastered: false,
+      requiresConfidence: true,
     };
 
-    setCurrentAnswer({ optionId, isCorrect: correct, xpEarned, isRepeatSolve, alreadyAttempted: previouslyAttempted });
+    setCurrentAnswer({
+      optionId,
+      response: answeredText,
+      isCorrect: Boolean(correct),
+      xpEarned: 0,
+      baseXpEarned: baseReward.xpEarned,
+      isRepeatSolve: baseReward.isRepeatSolve,
+      alreadyAttempted: baseReward.wasPreviouslyAttempted,
+      attemptId: attempt.id,
+      confidenceStatus: null,
+      requiresConfidence: true,
+      confidenceEligible: true,
+    });
     setPetMood(correct ? 'happy' : 'dizzy');
     setPetMessageIndex(Math.floor(Math.random() * 3));
 
-    const previousPlayerLevel = getLevelInfo(store.stats.xp, store.stats.leveling).level;
     const previousPetLevel = Math.floor(store.stats.totalCorrect / 10) + 1;
     const stats = {
       ...store.stats,
-      xp: store.stats.xp + xpEarned,
+      // Correctness is recorded immediately, but XP is applied exactly once on confidence selection.
       totalCorrect: store.stats.totalCorrect + (correct ? 1 : 0),
       activeDays: correct ? [...new Set([...store.stats.activeDays, dateKey])] : store.stats.activeDays,
       potdCompletedDates: correct && isPotd ? [...new Set([...store.stats.potdCompletedDates, dateKey])] : store.stats.potdCompletedDates,
     };
-    const nextPlayerLevel = getLevelInfo(stats.xp, stats.leveling).level;
     const nextPetLevel = Math.floor(stats.totalCorrect / 10) + 1;
     const levelUpEvents = [];
     if (nextPetLevel > previousPetLevel) {
       levelUpEvents.push({ id: makeId('levelup'), kind: 'pet', level: nextPetLevel, emoji: '🐣✨', title: 'BRAIN BUDDY EVOLVED!', detail: `Your companion reached Level ${nextPetLevel}. Keep the good reps coming!` });
-    }
-    if (nextPlayerLevel > previousPlayerLevel) {
-      levelUpEvents.push({ id: makeId('levelup'), kind: 'player', level: nextPlayerLevel, emoji: '🎉🚀', title: 'PLAYER LEVEL UP!', detail: `Level ${nextPlayerLevel} unlocked. Your next level takes a little more XP.` });
     }
     const nextStore = { ...store, history: [...store.history, attempt], stats };
     setStore(nextStore);
@@ -481,24 +531,81 @@ export default function App() {
     }
 
     if (correct) {
-      playUiSound(isRepeatSolve ? 'repeat' : 'success');
+      playUiSound(baseReward.isRepeatSolve ? 'repeat' : 'success');
       popConfetti();
-      if (isRepeatSolve) setToast('Active recall win! +5 XP for solving a question you have seen before.');
-      else if (isPotd) setToast(`POTD cleared! +${xpEarned} XP. Your daily brain reps are in the bank.`);
-      else setToast(`Correct answer! +${xpEarned} XP secured.`);
+      setToast('Correct! Choose your confidence to finalize your XP.');
     } else {
       playUiSound('wrong');
-      setToast('Good practice. Read the breakdown, then keep going. +5 practice XP.');
+      setToast('Answer recorded. Check the breakdown, then choose your confidence to finalize practice XP.');
     }
 
     if (levelUpEvents.length) {
-      const petUpgrade = levelUpEvents.some((event) => event.kind === 'pet');
-      const playerUpgrade = levelUpEvents.some((event) => event.kind === 'player');
       setLevelUpCelebrations(levelUpEvents);
       popLevelUpConfetti(levelUpEvents);
-      if (petUpgrade) playUiSound('petLevelUp', { delaySeconds: 0.55 });
-      if (playerUpgrade) playUiSound('playerLevelUp', { delaySeconds: petUpgrade ? 1.65 : 0.55 });
+      playUiSound('petLevelUp', { delaySeconds: 0.55 });
       setToast(levelUpEvents.map((event) => `${event.emoji} ${event.title} Level ${event.level}!`).join('  '));
+    }
+  }
+
+  function handleAnswer(optionId) {
+    if (!currentQuestion || currentAnswer || isFillInBlankQuestion(currentQuestion)) return;
+    const chosen = currentQuestion.options?.find((option) => option.id === optionId);
+    if (!chosen) return;
+    submitQuestionAnswer({ optionId, response: chosen.text, correct: optionId === currentQuestion.correctAnswer });
+  }
+
+  function handleFillBlankAnswer(response) {
+    if (!currentQuestion || currentAnswer || !isFillInBlankQuestion(currentQuestion)) return;
+    submitQuestionAnswer({ response, correct: evaluateFillInBlankAnswer(currentQuestion, response) });
+  }
+
+  function handleConfidenceSelect(confidenceStatus) {
+    if (!currentAnswer?.requiresConfidence || !currentAnswer.attemptId || !['explicit', 'shaky'].includes(confidenceStatus)) return;
+    const originalAttempt = store.history.find((attempt) => attempt.id === currentAnswer.attemptId);
+    if (!originalAttempt) return;
+    const updatedAttempt = applyConfidenceAssessment(originalAttempt, confidenceStatus, Date.now());
+    if (!updatedAttempt) return; // Idempotent guard prevents duplicate XP awards.
+    const xpEarned = updatedAttempt.xpEarned;
+    const previousPlayerLevel = getLevelInfo(store.stats.xp, store.stats.leveling).level;
+    const stats = { ...store.stats, xp: store.stats.xp + xpEarned };
+    const nextPlayerLevel = getLevelInfo(stats.xp, stats.leveling).level;
+    const nextStore = {
+      ...store,
+      history: store.history.map((attempt) => attempt.id === updatedAttempt.id ? updatedAttempt : attempt),
+      stats,
+    };
+    setStore(nextStore);
+    setCurrentAnswer((previous) => previous?.attemptId === updatedAttempt.id ? {
+      ...previous,
+      xpEarned,
+      confidenceStatus,
+      requiresConfidence: false,
+      confidenceEligible: true,
+    } : previous);
+
+    if (isCloudUser && authUser) {
+      writeStore(nextStore, getUserStorageKey(authUser.uid));
+      setCloudSyncStatus('syncing');
+      syncAttemptToFirestore(authUser, updatedAttempt, stats).then(() => setCloudSyncStatus('synced')).catch((error) => {
+        console.warn('Confidence choice could not sync yet; local profile is preserved.', error);
+        setCloudSyncStatus('error');
+      });
+    } else if (authStatus === 'guest') writeStore(nextStore);
+
+    if (nextPlayerLevel > previousPlayerLevel) {
+      const event = { id: makeId('levelup'), kind: 'player', level: nextPlayerLevel, emoji: '🎉🚀', title: 'PLAYER LEVEL UP!', detail: `Level ${nextPlayerLevel} unlocked. Your next level takes a little more XP.` };
+      setLevelUpCelebrations((previous) => [...previous, event]);
+      popLevelUpConfetti([event]);
+      playUiSound('playerLevelUp', { delaySeconds: 0.55 });
+    } else {
+      playUiSound(confidenceStatus === 'explicit' ? 'confidence' : 'shaky');
+    }
+    if (confidenceStatus === 'shaky') {
+      setToast(`Shaky recall saved. +${xpEarned} XP and ${originalAttempt.isCorrect ? 'this question is queued for review.' : 'this question remains in your review queue.'}`);
+    } else if (!originalAttempt.isCorrect) {
+      setToast(`Confidence recorded. +${xpEarned} practice XP; this question remains in your review queue.`);
+    } else {
+      setToast(`Confidence recorded. +${xpEarned} XP ${updatedAttempt.mastered ? '— marked as a mastered candidate.' : 'secured.'}`);
     }
   }
 
@@ -536,9 +643,16 @@ export default function App() {
   }
 
   function handleRandomize() {
+    if (currentAnswer?.requiresConfidence) { setToast('Choose your confidence first so XP is finalized before the next question.'); return; }
     setRandomizing(true);
+    const candidateBank = difficultyFilter === 'hard' ? allQuestions.filter(isHardOrSnippetQuestion) : allQuestions;
+    if (difficultyFilter === 'hard' && !candidateBank.length) {
+      setRandomizing(false);
+      setToast('No Hard / Interview Snippet questions are in your bank yet. Import some or switch the filter to All.');
+      return;
+    }
     const next = pickQuestionWithActiveRecall(
-      allQuestions, store.history, currentQuestion?.id, Math.random, 0.3,
+      candidateBank, store.history, currentQuestion?.id, Math.random, 0.3,
       store.stats.recentQuestionTrail || [],
     );
     if (next) {
@@ -554,6 +668,7 @@ export default function App() {
   }
 
   function handleGenerateMath() {
+    if (currentAnswer?.requiresConfidence) { setToast('Choose your confidence first so XP is finalized before the next question.'); return; }
     // Imported quantitative aptitude, logical reasoning, and word-problem questions
     // take priority. The procedural generator remains a fallback until that bank exists.
     const bankQuestion = pickMathAptitudeQuestion(
@@ -572,6 +687,7 @@ export default function App() {
   }
 
   function handleReturnToPotd() {
+    if (currentAnswer?.requiresConfidence) { setToast('Choose your confidence first so XP is finalized before the next question.'); return; }
     // Re-entering the daily question is a new recall run with a different option order.
     // Scoring checks full history, so repeat-correct XP remains limited.
     presentQuestion(dailyQuestion);
@@ -777,12 +893,23 @@ export default function App() {
                   key={`${currentQuestion?.id}-${optionShuffleRevision}`}
                   question={displayQuestion}
                   selectedOptionId={selectedOptionId}
+                  submittedResponse={selectedState?.response ?? ''}
+                  answerIsCorrect={selectedState?.isCorrect}
                   earnedXp={selectedState?.xpEarned ?? 0}
+                  baseXpEarned={selectedState?.baseXpEarned ?? 0}
+                  confidenceStatus={selectedState?.confidenceStatus ?? null}
+                  confidenceEligible={Boolean(selectedState?.confidenceEligible)}
+                  requiresConfidence={Boolean(selectedState?.requiresConfidence)}
                   isRepeatSolve={Boolean(selectedState?.isRepeatSolve)}
                   isLocked={isLocked}
                   isPotd={isPotd}
                   potdSolved={potdSolved}
                   onAnswer={handleAnswer}
+                  onFillBlankAnswer={handleFillBlankAnswer}
+                  onConfidenceSelect={handleConfidenceSelect}
+                  difficultyFilter={difficultyFilter}
+                  onDifficultyFilterChange={setDifficultyFilter}
+                  hardQuestionCount={allQuestions.filter(isHardOrSnippetQuestion).length}
                   onRandomize={handleRandomize}
                   onReturnToPotd={handleReturnToPotd}
                   onGenerateMath={handleGenerateMath}

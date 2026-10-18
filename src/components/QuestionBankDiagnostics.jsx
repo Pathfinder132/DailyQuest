@@ -20,6 +20,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { getQuestionBankTrack } from '../lib/questionTools.js';
+import { isFillInBlankQuestion } from '../lib/utils.js';
 
 const TRACKS = [
   { id: 'core', title: 'Core & Engineering', description: 'Programming, CS fundamentals, databases, networking and other technical topics.' },
@@ -46,13 +47,21 @@ function inspectQuestion(question) {
   if (!String(question.category ?? '').trim()) issues.push('Missing category.');
   if (!String(question.question ?? question.prompt ?? '').trim()) issues.push('Missing question text.');
   const options = Array.isArray(question.options) ? question.options : [];
-  if (options.length < 2) issues.push('Fewer than two options.');
-  const optionIds = options.map((option, index) => String(option?.id ?? `option-${index}`));
-  if (new Set(optionIds).size !== optionIds.length) issues.push('Duplicate option IDs.');
-  if (options.some((option) => !String(option?.text ?? option?.label ?? option ?? '').trim())) issues.push('An option has empty text.');
-  const correctAnswer = String(question.correctAnswer ?? question.answer ?? '');
-  if (!options.some((option) => String(option?.id ?? '') === correctAnswer || String(option?.text ?? option?.label ?? option ?? '') === correctAnswer)) {
-    issues.push('Correct answer does not match an option ID or text.');
+  const typedAnswer = isFillInBlankQuestion(question);
+  if (typedAnswer) {
+    const acceptedAnswers = [question.correctAnswer, ...(Array.isArray(question.acceptedAnswers) ? question.acceptedAnswers : [])]
+      .filter((answer) => String(answer ?? '').trim());
+    if (!acceptedAnswers.length) issues.push('Fill-in-the-blank question needs a correctAnswer or acceptedAnswers.');
+    if (options.length) issues.push('Fill-in-the-blank question should not require multiple-choice options.');
+  } else {
+    if (options.length < 2) issues.push('Fewer than two options.');
+    const optionIds = options.map((option, index) => String(option?.id ?? `option-${index}`));
+    if (new Set(optionIds).size !== optionIds.length) issues.push('Duplicate option IDs.');
+    if (options.some((option) => !String(option?.text ?? option?.label ?? option ?? '').trim())) issues.push('An option has empty text.');
+    const correctAnswer = String(question.correctAnswer ?? question.answer ?? '');
+    if (!options.some((option) => String(option?.id ?? '') === correctAnswer || String(option?.text ?? option?.label ?? option ?? '') === correctAnswer)) {
+      issues.push('Correct answer does not match an option ID or text.');
+    }
   }
   return issues;
 }
@@ -139,7 +148,7 @@ export default function QuestionBankDiagnostics({
       if (id && attemptIds.has(id)) duplicateAttemptIds.push(id);
       if (id) attemptIds.add(id);
       if (!attempt?.questionId || attempt?.timestamp == null || !Number.isFinite(Number(attempt.timestamp))) malformedAttempts.push(id || '(missing attempt ID)');
-      if (attempt?.questionId && !bankIds.has(String(attempt.questionId)) && !attempt.questionSnapshot?.options?.length) orphanAttempts += 1;
+      if (attempt?.questionId && !bankIds.has(String(attempt.questionId)) && !attempt.questionSnapshot?.options?.length && !isFillInBlankQuestion(attempt.questionSnapshot)) orphanAttempts += 1;
     }
     return { duplicateIds: [...new Set(duplicateIds)], malformed, duplicateAttemptIds: [...new Set(duplicateAttemptIds)], malformedAttempts, orphanAttempts };
   }, [questions, store?.history]);

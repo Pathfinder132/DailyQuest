@@ -159,6 +159,34 @@ export function formatDateTime(timestamp) {
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(timestamp));
 }
 
+/** Recognize typed questions while keeping legacy questions as multiple choice. */
+export function isFillInBlankQuestion(question) {
+  const type = String(question?.type ?? question?.questionType ?? '').trim().toLowerCase().replace(/[_ ]+/g, '-');
+  return type === 'fill-in-blank' || type === 'fill-blank' || type === 'fill-in-the-blank';
+}
+
+export function isSelectableQuestion(question) {
+  if (!question || !question.id) return false;
+  if (isFillInBlankQuestion(question)) {
+    const answers = [question.correctAnswer, ...(Array.isArray(question.acceptedAnswers) ? question.acceptedAnswers : [])];
+    return answers.some((answer) => String(answer ?? '').trim().length > 0);
+  }
+  return Array.isArray(question.options) && question.options.length > 0;
+}
+
+/** Normalize typed answers conservatively: trim, collapse whitespace, compare case-insensitively. */
+export function normalizeTypedAnswer(answer) {
+  return String(answer ?? '').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+}
+
+export function evaluateFillInBlankAnswer(question, response) {
+  const accepted = [question?.correctAnswer, ...(Array.isArray(question?.acceptedAnswers) ? question.acceptedAnswers : [])]
+    .filter((value) => value !== null && value !== undefined && String(value).trim())
+    .map(normalizeTypedAnswer);
+  const normalizedResponse = normalizeTypedAnswer(response);
+  return Boolean(normalizedResponse && accepted.includes(normalizedResponse));
+}
+
 /** Maximum number of recently displayed, distinct questions to avoid when the bank is large enough. */
 export const RECENT_QUESTION_COOLDOWN = 10;
 export const RECENT_QUESTION_TRAIL_LIMIT = 40;
@@ -215,7 +243,7 @@ export function getRecentQuestionIds(history = [], recentQuestionTrail = [], cur
 export function pickQuestionWithCooldown(candidates = [], currentQuestionId = null, history = [], recentQuestionTrail = [], random = Math.random, cooldownSize = RECENT_QUESTION_COOLDOWN) {
   const unique = new Map();
   for (const question of candidates || []) {
-    if (question?.id && Array.isArray(question.options) && question.options.length) {
+    if (isSelectableQuestion(question)) {
       if (!unique.has(String(question.id))) unique.set(String(question.id), question);
     }
   }
@@ -254,7 +282,7 @@ export function pickQuestionWithActiveRecall(
 ) {
   const questionsById = new Map();
   for (const question of questionBank || []) {
-    if (question?.id && Array.isArray(question.options) && question.options.length) {
+    if (isSelectableQuestion(question)) {
       questionsById.set(String(question.id), question);
     }
   }
@@ -266,7 +294,7 @@ export function pickQuestionWithActiveRecall(
   for (const { attempt } of orderedHistory) {
     const id = String(attempt.questionId);
     latestAttemptById.set(id, attempt);
-    if (!questionsById.has(id) && attempt.questionSnapshot?.id && Array.isArray(attempt.questionSnapshot.options) && attempt.questionSnapshot.options.length) {
+    if (!questionsById.has(id) && isSelectableQuestion(attempt.questionSnapshot)) {
       questionsById.set(id, attempt.questionSnapshot);
     }
   }
@@ -294,8 +322,8 @@ export function pickQuestionWithActiveRecall(
   for (const question of selectable) {
     const latest = latestAttemptById.get(String(question.id));
     if (!latest) continue;
-    if (latest.isCorrect) latestCorrect.push(question);
-    else latestWrong.push(question);
+    if (!latest.isCorrect || latest.needsReview || latest.confidenceStatus === 'shaky') latestWrong.push(question);
+    else latestCorrect.push(question);
   }
 
   const choose = (items) => {
@@ -312,6 +340,31 @@ export function pickQuestionWithActiveRecall(
   }
 
   return choose(selectable) || candidates[0] || allQuestions[0] || null;
+}
+
+/**
+ * Finalize an answer's one-time confidence assessment. Returns null if already finalized,
+ * making duplicate clicks/replays unable to award XP twice. Wrong answers retain the
+ * ordinary practice-XP base but stay in review regardless of confidence choice.
+ */
+export function applyConfidenceAssessment(attempt, confidenceStatus, timestamp = Date.now()) {
+  if (!attempt || !['explicit', 'shaky'].includes(confidenceStatus)) return null;
+  if (attempt.confidenceStatus || attempt.confidenceAppliedAt) return null;
+  const baseXpEarned = Math.max(0, Math.floor(Number(attempt.baseXpEarned) || 0));
+  const xpEarned = confidenceStatus === 'shaky'
+    ? (baseXpEarned > 0 ? Math.max(1, Math.floor(baseXpEarned / 2)) : 0)
+    : baseXpEarned;
+  const isCorrect = Boolean(attempt.isCorrect);
+  return {
+    ...attempt,
+    xpEarned,
+    confidenceStatus,
+    confidenceMultiplier: confidenceStatus === 'shaky' ? 0.5 : 1,
+    confidenceAppliedAt: timestamp,
+    needsReview: !isCorrect || confidenceStatus === 'shaky',
+    mastered: Boolean(isCorrect && confidenceStatus === 'explicit'),
+    requiresConfidence: false,
+  };
 }
 
 /** XP rules: unseen correct question = 25 XP; any correct repeat = 5 XP; misses = 5 XP. */

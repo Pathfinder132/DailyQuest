@@ -64,3 +64,8 @@ React · Vite · Tailwind CSS · Lucide · Canvas Confetti · Firebase Authentic
 Made for small daily wins and a sharper engineering mindset. 🚀
 
 Question selection uses a 10-distinct-question recency cooldown when alternatives exist, prioritizes recent misses through active recall, and relaxes cooldown automatically for small banks.
+
+
+### Question formats
+
+Imported questions support the existing multiple-choice format and `type: "fill-in-blank"` for typed answers. Fill-in-the-blank questions require `id`, `category`, `question`, and `correctAnswer` (or `acceptedAnswers`); options are not required. Both `solution` and `explanation` are accepted. Optional `difficulty` supports the Hard / Interview Snippet filter. After each new answer, record confidence to finalize XP; shaky recall is included in review analytics and Firestore/local history.

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, BookOpen, CalendarCheck, CheckCircle2, Cloud, Download, Flame, History, Sparkles, Target, Upload } from 'lucide-react';
+import { Activity, BookOpen, Brain, CalendarCheck, CheckCircle2, Cloud, Download, Flame, History, ShieldAlert, Sparkles, Target, Upload } from 'lucide-react';
 import { formatDateTime, getLevelInfo, localDateKey } from '../lib/utils.js';
 import QuestionBankDiagnostics from './QuestionBankDiagnostics.jsx';
 
@@ -9,6 +9,15 @@ export default function StatsPanel({ view = 'sidebar', store, streak, level, pet
   const correct = store.history.filter((attempt) => attempt.isCorrect).length;
   const attempts = store.history.length;
   const accuracy = attempts ? Math.round((correct / attempts) * 100) : 0;
+  const confidenceAttempts = store.history.filter((attempt) => ['explicit', 'shaky'].includes(attempt.confidenceStatus));
+  const shakyAttempts = confidenceAttempts.filter((attempt) => attempt.confidenceStatus === 'shaky').length;
+  const latestAttemptByQuestion = new Map();
+  for (const attempt of [...store.history].sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0))) {
+    if (attempt.questionId) latestAttemptByQuestion.set(String(attempt.questionId), attempt);
+  }
+  const latestQuestionAttempts = [...latestAttemptByQuestion.values()];
+  const masteredQuestions = latestQuestionAttempts.filter((attempt) => attempt.isCorrect && attempt.confidenceStatus === 'explicit' && !attempt.needsReview).length;
+  const reviewQuestions = latestQuestionAttempts.filter((attempt) => Boolean(attempt.needsReview) || !attempt.isCorrect || attempt.confidenceStatus === 'shaky').length;
   const today = localDateKey();
   const todayAttempts = store.history.filter((attempt) => attempt.dateKey === today).length;
   const active = new Set(store.stats.activeDays || []);
@@ -44,6 +53,16 @@ export default function StatsPanel({ view = 'sidebar', store, streak, level, pet
         <div className="metric-card metric-coral"><div className="metric-card-icon"><CalendarCheck size={17} /></div><strong>{todayAttempts}</strong><span>Today's reps</span></div>
       </section>
 
+      <section className="side-card confidence-analytics-card">
+        <div className="side-card-title"><span className="confidence-analytics-icon"><Brain size={19} /></span><div><p className="eyebrow">ACTIVE RECALL QUALITY</p><h3>Confidence &amp; mastery</h3></div></div>
+        <div className="confidence-analytics-grid">
+          <div className="confidence-analytics-metric confidence-metric-mastered"><CheckCircle2 size={17} /><strong>{masteredQuestions}</strong><span>Mastered candidates</span></div>
+          <div className="confidence-analytics-metric confidence-metric-review"><ShieldAlert size={17} /><strong>{reviewQuestions}</strong><span>Questions to review</span></div>
+          <div className="confidence-analytics-metric confidence-metric-shaky"><Target size={17} /><strong>{shakyAttempts}</strong><span>Shaky attempts</span></div>
+        </div>
+        <p className="muted-note">Mastery is counted per question using its latest attempt. Shaky responses and incorrect answers stay in review.</p>
+      </section>
+
       <section className="side-card recent-card">
         <div className="recent-heading"><div className="side-card-title"><span className="recent-icon"><History size={17} /></span><h3>Recent activity</h3></div><span className="recent-count">{Math.min(4, history.length)} / {history.length}</span></div>
         {history.length ? (
@@ -51,7 +70,9 @@ export default function StatsPanel({ view = 'sidebar', store, streak, level, pet
             {history.slice(0, 4).map((attempt) => <div className="recent-item" key={attempt.id}>
               <span className={`recent-result ${attempt.isCorrect ? 'recent-result-correct' : 'recent-result-wrong'}`}>{attempt.isCorrect ? '✓' : '×'}</span>
               <div className="recent-copy"><strong>{attempt.questionTitle || attempt.questionId}</strong><span>{attempt.category || 'Engineering'} · {formatDateTime(attempt.timestamp)}</span></div>
-              <span className={`recent-xp ${attempt.isCorrect ? 'recent-xp-plus' : ''}`}>+{attempt.xpEarned ?? (attempt.isCorrect ? 25 : 5)} XP</span>
+              {Number.isFinite(attempt.baseXpEarned) && !attempt.confidenceStatus && !attempt.confidenceAppliedAt
+                ? <span className="recent-xp recent-xp-pending">Pending confidence</span>
+                : <span className={`recent-xp ${attempt.isCorrect ? 'recent-xp-plus' : ''}`}>+{attempt.xpEarned ?? (attempt.isCorrect ? 25 : 5)} XP</span>}
             </div>)}
           </div>
         ) : (

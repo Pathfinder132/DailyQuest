@@ -1,4 +1,4 @@
-import { pickQuestionWithCooldown, shuffleArray } from './utils.js';
+import { isSelectableQuestion, pickQuestionWithCooldown, shuffleArray } from './utils.js';
 
 const LETTERS = ['A', 'B', 'C', 'D'];
 
@@ -109,6 +109,14 @@ export function pickMathAptitudeQuestion(
   return pickQuestionWithCooldown(eligible, currentQuestionId, history, recentQuestionTrail, random, cooldownSize);
 }
 
+/** Match the focused interview filter without excluding imported questions using common label variants. */
+export function isHardOrSnippetQuestion(question) {
+  const difficulty = String(question?.difficulty ?? '').toLowerCase();
+  const metadata = [question?.type, question?.questionType, question?.topic, question?.subCategory,
+    ...(Array.isArray(question?.tags) ? question.tags : [question?.tags])].filter(Boolean).join(' ').toLowerCase();
+  return /\bhard\b|\badvanced\b|interview|snippet|code challenge/.test(`${difficulty} ${metadata}`);
+}
+
 /** A stable track classification used by the bank inventory and future question types. */
 export function getQuestionBankTrack(question) {
   if (!question || typeof question !== 'object') return 'core';
@@ -131,33 +139,55 @@ export function normalizeImportedQuestion(input, index = 0) {
   const id = String(input.id ?? '').trim();
   const category = String(input.category ?? '').trim();
   const question = String(input.question ?? input.prompt ?? '').trim();
+  const rawType = String(input.type ?? input.questionType ?? '').trim().toLowerCase().replace(/[_ ]+/g, '-');
+  const isFillBlank = ['fill-in-blank', 'fill-blank', 'fill-in-the-blank'].includes(rawType);
   const rawOptions = input.options;
   if (!id) throw new Error(`Question ${index + 1} is missing an id.`);
   if (!category) throw new Error(`Question ${index + 1} is missing a category.`);
   if (!question) throw new Error(`Question ${index + 1} is missing question text.`);
-  if (!Array.isArray(rawOptions) || rawOptions.length < 2) {
-    throw new Error(`Question "${id}" needs an options array with at least 2 options.`);
-  }
-  const options = rawOptions.map((option, optionIndex) => {
-    if (typeof option === 'string' || typeof option === 'number') {
-      return { id: LETTERS[optionIndex] ?? `O${optionIndex + 1}`, text: String(option) };
+
+  let options = [];
+  let correctAnswer;
+  let acceptedAnswers;
+  if (isFillBlank) {
+    const suppliedAnswer = input.correctAnswer ?? input.answer;
+    acceptedAnswers = Array.isArray(input.acceptedAnswers)
+      ? input.acceptedAnswers.map((answer) => String(answer ?? '').trim()).filter(Boolean)
+      : [];
+    if (suppliedAnswer !== undefined && suppliedAnswer !== null && String(suppliedAnswer).trim()) {
+      correctAnswer = String(suppliedAnswer).trim();
+      if (!acceptedAnswers.some((answer) => answer.localeCompare(correctAnswer, undefined, { sensitivity: 'accent' }) === 0)) acceptedAnswers.unshift(correctAnswer);
+    } else if (acceptedAnswers.length) {
+      correctAnswer = acceptedAnswers[0];
+    } else {
+      throw new Error(`Fill-in-the-blank question "${id}" needs a correctAnswer or a non-empty acceptedAnswers array.`);
     }
-    return {
-      id: String(option?.id ?? LETTERS[optionIndex] ?? `O${optionIndex + 1}`).trim(),
-      text: String(option?.text ?? option?.label ?? option?.value ?? '').trim(),
-    };
-  });
-  if (options.some((option) => !option.text)) throw new Error(`Question "${id}" contains an empty option.`);
-  if (new Set(options.map((option) => option.id)).size !== options.length) throw new Error(`Question "${id}" has duplicate option ids.`);
+  } else {
+    if (!Array.isArray(rawOptions) || rawOptions.length < 2) {
+      throw new Error(`Question "${id}" needs an options array with at least 2 options.`);
+    }
+    options = rawOptions.map((option, optionIndex) => {
+      if (typeof option === 'string' || typeof option === 'number') {
+        return { id: LETTERS[optionIndex] ?? `O${optionIndex + 1}`, text: String(option) };
+      }
+      return {
+        id: String(option?.id ?? LETTERS[optionIndex] ?? `O${optionIndex + 1}`).trim(),
+        text: String(option?.text ?? option?.label ?? option?.value ?? '').trim(),
+      };
+    });
+    if (options.some((option) => !option.text)) throw new Error(`Question "${id}" contains an empty option.`);
+    if (new Set(options.map((option) => option.id)).size !== options.length) throw new Error(`Question "${id}" has duplicate option ids.`);
 
-  const suppliedAnswer = String(input.correctAnswer ?? input.answer ?? '').trim();
-  const answerOption = options.find((option) => option.id === suppliedAnswer)
-    ?? options.find((option) => option.text === suppliedAnswer);
-  if (!answerOption) throw new Error(`Question "${id}" has a correctAnswer that does not match any option id or text.`);
+    const suppliedAnswer = String(input.correctAnswer ?? input.answer ?? '').trim();
+    const answerOption = options.find((option) => option.id === suppliedAnswer)
+      ?? options.find((option) => option.text === suppliedAnswer);
+    if (!answerOption) throw new Error(`Question "${id}" has a correctAnswer that does not match any option id or text.`);
+    correctAnswer = answerOption.id;
+  }
 
-  return {
-    id, category, question, options, correctAnswer: answerOption.id,
-    difficulty: String(input.difficulty ?? 'Imported'),
+  const normalized = {
+    id, category, question, options, correctAnswer,
+    difficulty: normalizeDifficulty(input.difficulty),
     solution: String(input.solution ?? input.explanation ?? 'No explanation provided yet.'),
     takeaway: String(input.takeaway ?? ''),
     topic: String(input.topic ?? '').trim() || undefined,
@@ -168,6 +198,21 @@ export function normalizeImportedQuestion(input, index = 0) {
     code: typeof input.code === 'string' ? input.code : undefined,
     source: 'imported',
   };
+  // Only add `type` when explicitly supplied so legacy multiple-choice questions remain shape-compatible.
+  if (input.type || isFillBlank) normalized.type = isFillBlank ? 'fill-in-blank' : String(input.type).trim();
+  if (acceptedAnswers?.length) normalized.acceptedAnswers = [...new Set(acceptedAnswers)];
+  return normalized;
+}
+
+export function normalizeDifficulty(value) {
+  const difficulty = String(value ?? 'Medium').trim();
+  if (!difficulty) return 'Medium';
+  const lower = difficulty.toLowerCase();
+  if (/^(easy|beginner|basic)$/.test(lower)) return 'Easy';
+  if (/^(medium|moderate|intermediate|core concept)$/.test(lower)) return 'Medium';
+  if (/^(hard|difficult|advanced)$/.test(lower)) return 'Hard';
+  if (/interview|snippet|code challenge|code snippet/.test(lower)) return 'Hard / Interview Snippet';
+  return difficulty;
 }
 
 function hasSameQuestionContent(existing, incoming) {
@@ -177,6 +222,8 @@ function hasSameQuestionContent(existing, incoming) {
       (existing.topic ?? '') !== (incoming.topic ?? '') ||
       (existing.subCategory ?? '') !== (incoming.subCategory ?? '') ||
       (existing.questionType ?? '') !== (incoming.questionType ?? '') ||
+      (existing.type ?? '') !== (incoming.type ?? '') ||
+      JSON.stringify(existing.acceptedAnswers ?? []) !== JSON.stringify(incoming.acceptedAnswers ?? []) ||
       (existing.bankType ?? '') !== (incoming.bankType ?? '') ||
       JSON.stringify(existing.tags ?? []) !== JSON.stringify(incoming.tags ?? []) ||
       (existing.code ?? '') !== (incoming.code ?? '')) {

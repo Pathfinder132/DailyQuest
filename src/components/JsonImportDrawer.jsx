@@ -20,6 +20,21 @@ const EXAMPLE = `[
   }
 ]`;
 
+const FILL_IN_BLANK_EXAMPLE = `[
+  {
+    "id": "hard_001",
+    "category": "SQL",
+    "difficulty": "Hard / Interview Snippet",
+    "type": "fill-in-blank",
+    "question": "Which SQL clause filters grouped records AFTER aggregation operations such as COUNT() or SUM()?",
+    "correctAnswer": "HAVING",
+    "acceptedAnswers": ["HAVING"],
+    "code": "SELECT department, COUNT(*) AS headcount\nFROM employees\nGROUP BY department\n_____ headcount > 5;",
+    "explanation": "gold(*The Core Rule:* WHERE filters individual rows before aggregation). blue(*HAVING filters grouped results*) after GROUP BY computes aggregate values.",
+    "takeaway": "Use HAVING to filter based on aggregate conditions."
+  }
+]`;
+
 const PROJECT_BASED_EXAMPLE = `[
   {
     "id": "project_api_design_001",
@@ -156,6 +171,10 @@ export default function JsonImportDrawer({ open, onClose, existingQuestions = []
     setRaw(PROJECT_BASED_EXAMPLE); setError(''); setSuccess(''); setPreview(null); setAlreadyImportedCount(0); setInputCount(0);
   }
 
+  function loadFillInBlankExample() {
+    setRaw(FILL_IN_BLANK_EXAMPLE); setError(''); setSuccess(''); setPreview(null); setAlreadyImportedCount(0); setInputCount(0);
+  }
+
   return (
     <div className="drawer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <aside className="import-drawer" role="dialog" aria-modal="true" aria-labelledby="import-title">
@@ -171,8 +190,8 @@ export default function JsonImportDrawer({ open, onClose, existingQuestions = []
 
         <div className="format-note">
           <strong>Must-have fields</strong>
-          <div className="format-chips"><code>id</code><code>category</code><code>question</code><code>options[]</code><code>correctAnswer</code></div>
-          <p>Options can be strings or objects with <code>id</code> + <code>text</code>. The <code>correctAnswer</code> must match an option ID or its exact text.</p>
+          <div className="format-chips"><code>id</code><code>category</code><code>question</code><code>correctAnswer</code><code>options[] (MCQ only)</code></div>
+          <p>Multiple-choice questions need at least two options. For <code>"type": "fill-in-blank"</code>, omit options and supply <code>correctAnswer</code> plus optional <code>acceptedAnswers[]</code>. Both <code>solution</code> and <code>explanation</code> are supported.</p>
         </div>
 
         <div className="math-import-note">
@@ -189,6 +208,11 @@ export default function JsonImportDrawer({ open, onClose, existingQuestions = []
             <p>For case studies, architecture trade-offs, debugging scenarios, or project decisions, add <code>"bankType": "project"</code>. The dashboard will count these separately from Core and Math.</p>
           </div>
           <button type="button" className="secondary-button" onClick={loadProjectExample}>Load project example</button>
+        </div>
+
+        <div className="fillblank-import-note">
+          <div><strong>Typed recall / interview snippets</strong><p>Use <code>"type": "fill-in-blank"</code> to replace A/B/C/D buttons with a high-contrast text field. Matching ignores letter case and repeated whitespace.</p></div>
+          <button type="button" className="secondary-button" onClick={loadFillInBlankExample}>Load fill-in-the-blank example</button>
         </div>
 
         <div className="editor-topline">

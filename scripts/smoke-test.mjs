@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { calculateQuestionReward, ensureLevelingProfile, getLastDisplayedOptionOrder, getLevelInfo, getRecentQuestionIds, pickQuestionWithActiveRecall, pickQuestionWithCooldown, shuffleOptionsForDisplay, xpRequiredForLevel } from '../src/lib/utils.js';
-import { getQuestionBankTrack, isMathAptitudeQuestion, pickMathAptitudeQuestion, validateQuestionArray } from '../src/lib/questionTools.js';
+import { applyConfidenceAssessment, calculateQuestionReward, ensureLevelingProfile, evaluateFillInBlankAnswer, getLastDisplayedOptionOrder, getLevelInfo, getRecentQuestionIds, isFillInBlankQuestion, pickQuestionWithActiveRecall, pickQuestionWithCooldown, shuffleOptionsForDisplay, xpRequiredForLevel } from '../src/lib/utils.js';
+import { getQuestionBankTrack, isHardOrSnippetQuestion, isMathAptitudeQuestion, pickMathAptitudeQuestion, validateQuestionArray } from '../src/lib/questionTools.js';
 import { getLegacyMigrationUid, getUserStorageKey, mergeStores, readStore, setLegacyMigrationUid, storeHasData, writeStore } from '../src/lib/storage.js';
 
 const question = (id) => ({
@@ -185,6 +185,59 @@ const normalizedProject = validateQuestionArray(projectJson, []).questions[0];
 assert.equal(normalizedProject.bankType, 'project', 'project bank metadata is preserved during import');
 assert.equal(getQuestionBankTrack(normalizedProject), 'project', 'project bank questions are classified separately from core and math');
 assert.equal(getQuestionBankTrack({ ...question('math-bank-demo'), bankType: 'math', category: 'Custom' }), 'math', 'an explicit math bank type is recognized even with a custom category');
+
+
+const fillBlankJson = JSON.stringify([{
+  id: 'hard_001', category: 'SQL', difficulty: 'Hard', type: 'fill-in-blank',
+  question: 'Which clause filters after aggregation?', correctAnswer: 'HAVING', acceptedAnswers: ['HAVING'],
+  explanation: 'gold(*WHERE filters rows.*) blue(*HAVING filters grouped rows.*)',
+  code: 'SELECT dept, COUNT(*) FROM employees GROUP BY dept HAVING COUNT(*) > 5;'
+}]);
+const normalizedFillBlank = validateQuestionArray(fillBlankJson, []).questions[0];
+assert.equal(normalizedFillBlank.type, 'fill-in-blank', 'import supports fill-in-the-blank question types');
+assert.deepEqual(normalizedFillBlank.options, [], 'fill-in-the-blank does not require MCQ options');
+assert.equal(normalizedFillBlank.solution, 'gold(*WHERE filters rows.*) blue(*HAVING filters grouped rows.*)', 'explanation aliases into the solution field');
+assert.equal(isFillInBlankQuestion(normalizedFillBlank), true);
+assert.equal(evaluateFillInBlankAnswer(normalizedFillBlank, ' having  '), true, 'typed matching ignores case and repeated/surrounding whitespace');
+assert.equal(evaluateFillInBlankAnswer(normalizedFillBlank, 'WHERE'), false, 'typed matching rejects unmatched answers');
+const fillBlankWithAliases = validateQuestionArray(JSON.stringify([{ id:'fib_alias', category:'SQL', type:'fill-in-blank', question:'What clause?', acceptedAnswers:['HAVING', 'having'] }]), []).questions[0];
+assert.equal(evaluateFillInBlankAnswer(fillBlankWithAliases, 'HAVING'), true, 'acceptedAnswers can define answers when correctAnswer is omitted');
+assert.throws(() => validateQuestionArray(JSON.stringify([{ id:'fib_invalid', category:'SQL', type:'fill-in-blank', question:'What clause?' }]), []), /needs a correctAnswer or a non-empty acceptedAnswers/);
+assert.equal(isHardOrSnippetQuestion(normalizedFillBlank), true, 'hard fill-in-the-blank questions are included in the interview filter');
+assert.equal(isHardOrSnippetQuestion({ id:'easy_1', difficulty:'Easy', category:'SQL' }), false);
+const shakyRightQuestion = { ...question('shaky_right'), difficulty: 'Hard' };
+const explicitRightQuestion = { ...question('explicit_right'), difficulty: 'Hard' };
+const reviewAwarePick = pickQuestionWithActiveRecall(
+  [shakyRightQuestion, explicitRightQuestion],
+  [
+    { id:'shaky-attempt', questionId:'shaky_right', isCorrect:true, needsReview:true, confidenceStatus:'shaky', timestamp:10, questionSnapshot:shakyRightQuestion },
+    { id:'explicit-attempt', questionId:'explicit_right', isCorrect:true, needsReview:false, confidenceStatus:'explicit', timestamp:20, questionSnapshot:explicitRightQuestion },
+  ],
+  'not-in-bank',
+  (() => { const values = [0.1, 0.1, 0.1]; return () => values.shift() ?? 0.1; })(),
+  0.3,
+  [],
+  0,
+);
+assert.equal(reviewAwarePick.id, 'shaky_right', 'correct-but-shaky answers join the active recall review-priority pool');
+console.log('Typed-question tests passed: importer normalization, accepted answer matching, explanation aliasing, and hard/snippet filter.');
+
+const explicitAttempt = applyConfidenceAssessment({ id:'conf-1', baseXpEarned:25, isCorrect:true }, 'explicit', 1000);
+assert.equal(explicitAttempt.xpEarned, 25, 'explicit correct answer awards full base XP');
+assert.equal(explicitAttempt.mastered, true);
+assert.equal(explicitAttempt.needsReview, false);
+assert.equal(applyConfidenceAssessment(explicitAttempt, 'shaky', 2000), null, 'a finalized attempt cannot be scored a second time');
+const shakyAttempt = applyConfidenceAssessment({ id:'conf-2', baseXpEarned:25, isCorrect:true }, 'shaky', 1000);
+assert.equal(shakyAttempt.xpEarned, 12, 'shaky recall awards half XP rounded down');
+assert.equal(shakyAttempt.needsReview, true);
+assert.equal(shakyAttempt.mastered, false);
+const wrongConfidentAttempt = applyConfidenceAssessment({ id:'conf-3', baseXpEarned:5, isCorrect:false }, 'explicit', 1000);
+assert.equal(wrongConfidentAttempt.xpEarned, 5, 'confidently wrong responses keep practice XP, not correct-answer XP');
+assert.equal(wrongConfidentAttempt.needsReview, true, 'an incorrect answer always remains in review');
+const wrongShakyAttempt = applyConfidenceAssessment({ id:'conf-4', baseXpEarned:5, isCorrect:false }, 'shaky', 1000);
+assert.equal(wrongShakyAttempt.xpEarned, 2, 'shaky incorrect responses receive half practice XP');
+assert.equal(wrongShakyAttempt.needsReview, true);
+console.log('Confidence scoring tests passed: full/half XP, review queue flags, mastery flags, and idempotent finalization.');
 console.log('New feature tests passed: stable-ID option shuffle, active recall, math/aptitude bank selection, topic/tag import, and project-bank metadata.');
 
 
@@ -220,6 +273,9 @@ assert.equal(getLegacyMigrationUid(), 'google-user-a', 'the first Google account
 assert.equal(storeHasData(readStore()), false, 'shared guest cache is cleared after a recoverable backup is made');
 assert.deepEqual(JSON.parse(memoryStorage.get('uttej-engineering-warmup-v1:legacy-backup:google-user-a')), legacyStore, 'legacy progress remains recoverable locally');
 assert.deepEqual(mergeStores(legacyStore, legacyStore).history.map((item) => item.id), ['attempt-1'], 'merging cloud and local caches does not double-count the same attempt');
+const pendingConfidence = { id:'confidence-attempt', questionId:'q-conf', timestamp:10, baseXpEarned:25, xpEarned:0, isCorrect:true, confidenceStatus:null };
+const finalizedConfidence = { ...pendingConfidence, confidenceStatus:'shaky', xpEarned:12, confidenceAppliedAt:20, needsReview:true };
+assert.equal(mergeStores({ history:[pendingConfidence], customQuestions:[], stats:{xp:0,totalCorrect:1,activeDays:[],potdCompletedDates:[]} }, { history:[finalizedConfidence], customQuestions:[], stats:{xp:12,totalCorrect:1,activeDays:[],potdCompletedDates:[]} }).history[0].confidenceStatus, 'shaky', 'merge prefers finalized confidence records over stale pending snapshots');
 const mergedCustom = mergeStores(
   { ...legacyStore, customQuestions: [{ id: 'custom-1', question: 'old version', _warmupUpdatedAt: 10 }] },
   { ...legacyStore, customQuestions: [{ id: 'custom-1', question: 'new version', _warmupUpdatedAt: 20 }] },

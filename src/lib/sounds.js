@@ -60,6 +60,15 @@ const CUES = {
     [523.25, 0, 0.06, 'triangle', 0.17],
     [783.99, 0.075, 0.12, 'square', 0.18],
   ],
+  confidence: [
+    [587.33, 0, 0.08, 'triangle', 0.16],
+    [783.99, 0.075, 0.09, 'sine', 0.17],
+    [987.77, 0.16, 0.14, 'triangle', 0.18],
+  ],
+  shaky: [
+    [493.88, 0, 0.09, 'triangle', 0.15],
+    [440, 0.085, 0.11, 'sine', 0.15],
+  ],
   // Warm, rising sparkle for the pet's evolution.
   petLevelUp: [
     [659.25, 0, 0.14, 'triangle', 0.19],
