@@ -9,6 +9,7 @@ export const EMPTY_STORE = {
     totalCorrect: 0,
     activeDays: [],
     potdCompletedDates: [],
+    recentQuestionTrail: [],
   },
 };
 
@@ -20,7 +21,7 @@ function cloneEmptyStore() {
   return {
     history: [],
     customQuestions: [],
-    stats: { xp: 0, totalCorrect: 0, activeDays: [], potdCompletedDates: [] },
+    stats: { xp: 0, totalCorrect: 0, activeDays: [], potdCompletedDates: [], recentQuestionTrail: [] },
   };
 }
 
@@ -38,6 +39,7 @@ export function readStore(storageKey = STORAGE_KEY) {
         totalCorrect: Number.isFinite(parsed.stats?.totalCorrect) ? parsed.stats.totalCorrect : 0,
         activeDays: Array.isArray(parsed.stats?.activeDays) ? parsed.stats.activeDays : [],
         potdCompletedDates: Array.isArray(parsed.stats?.potdCompletedDates) ? parsed.stats.potdCompletedDates : [],
+        recentQuestionTrail: Array.isArray(parsed.stats?.recentQuestionTrail) ? parsed.stats.recentQuestionTrail.filter((entry) => (typeof entry === 'string' && entry) || (entry && typeof entry.questionId === 'string' && entry.questionId)) : [],
         ...(parsed.stats?.leveling && Number.isFinite(parsed.stats.leveling.baseXp) && Number.isFinite(parsed.stats.leveling.baseLevel)
           ? { leveling: { baseXp: parsed.stats.leveling.baseXp, baseLevel: parsed.stats.leveling.baseLevel, version: parsed.stats.leveling.version || 1 } }
           : {}),
@@ -132,6 +134,26 @@ export function mergeStores(...inputStores) {
     for (const day of stats.activeDays || []) activeDays.add(day);
     for (const day of stats.potdCompletedDates || []) potdCompletedDates.add(day);
   }
+  const trailById = new Map();
+  let legacyTrailIndex = 0;
+  for (const stats of allStats) {
+    for (const entry of stats.recentQuestionTrail || []) {
+      const normalized = typeof entry === 'string'
+        ? { id: `legacy-view-${entry}-${legacyTrailIndex}`, questionId: entry, timestamp: legacyTrailIndex + 1 }
+        : {
+            id: String(entry.id || `${entry.questionId}-${entry.timestamp || legacyTrailIndex}`),
+            questionId: String(entry.questionId || ''),
+            timestamp: Number(entry.timestamp || 0),
+          };
+      legacyTrailIndex += 1;
+      if (!normalized.questionId) continue;
+      const previous = trailById.get(normalized.id);
+      if (!previous || normalized.timestamp >= previous.timestamp) trailById.set(normalized.id, normalized);
+    }
+  }
+  const recentQuestionTrail = [...trailById.values()]
+    .sort((a, b) => a.timestamp - b.timestamp || a.id.localeCompare(b.id))
+    .slice(-40);
   for (const attempt of history) {
     if (attempt.isCorrect && attempt.dateKey) activeDays.add(attempt.dateKey);
     if (attempt.isCorrect && attempt.isPotd && attempt.dateKey) potdCompletedDates.add(attempt.dateKey);
@@ -151,6 +173,7 @@ export function mergeStores(...inputStores) {
       totalCorrect,
       activeDays: [...activeDays].sort(),
       potdCompletedDates: [...potdCompletedDates].sort(),
+      recentQuestionTrail,
       ...(leveling ? { leveling: { baseXp: leveling.baseXp, baseLevel: leveling.baseLevel, version: leveling.version || 1 } } : {}),
     },
   };

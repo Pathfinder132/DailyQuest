@@ -62,3 +62,5 @@ React · Vite · Tailwind CSS · Lucide · Canvas Confetti · Firebase Authentic
 ---
 
 Made for small daily wins and a sharper engineering mindset. 🚀
+
+Question selection uses a 10-distinct-question recency cooldown when alternatives exist, prioritizes recent misses through active recall, and relaxes cooldown automatically for small banks.

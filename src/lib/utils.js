@@ -159,48 +159,159 @@ export function formatDateTime(timestamp) {
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(timestamp));
 }
 
+/** Maximum number of recently displayed, distinct questions to avoid when the bank is large enough. */
+export const RECENT_QUESTION_COOLDOWN = 10;
+export const RECENT_QUESTION_TRAIL_LIMIT = 40;
+
+function timestampOf(value, fallback = 0) {
+  const stamp = Number(value?.timestamp ?? value?.viewedAt ?? value?.at);
+  return Number.isFinite(stamp) && stamp > 0 ? stamp : fallback;
+}
+
 /**
- * Random question selection with a 30% active-recall branch.
- * Within that branch, questions whose latest recorded attempt was incorrect are
- * preferred (72% chance) over recently answered correctly questions (28%).
- * The remaining 70% stays an ordinary random pick from the available question bank.
+ * Produce the recent question IDs from actual display events and legacy attempts.
+ * Current question is excluded because callers already exclude it from candidates.
+ * Trails store display events, so skipping an unanswered question also counts toward
+ * cooldown. Legacy history fills in the recency window for profiles created earlier.
  */
-export function pickQuestionWithActiveRecall(questionBank, history = [], currentQuestionId = null, random = Math.random, reviewChance = 0.3) {
+export function getRecentQuestionIds(history = [], recentQuestionTrail = [], currentQuestionId = null, limit = RECENT_QUESTION_COOLDOWN) {
+  const activities = [];
+  (history || []).forEach((attempt, index) => {
+    if (!attempt?.questionId) return;
+    activities.push({
+      questionId: String(attempt.questionId),
+      timestamp: timestampOf(attempt, index + 1),
+      order: index,
+    });
+  });
+  (recentQuestionTrail || []).forEach((entry, index) => {
+    const questionId = typeof entry === 'string' ? entry : entry?.questionId;
+    if (!questionId) return;
+    activities.push({
+      questionId: String(questionId),
+      timestamp: timestampOf(entry, index + 1),
+      order: activities.length + index,
+    });
+  });
+  activities.sort((a, b) => a.timestamp - b.timestamp || a.order - b.order);
+
+  const seen = new Set();
+  const recent = [];
+  const currentId = currentQuestionId == null ? null : String(currentQuestionId);
+  for (let i = activities.length - 1; i >= 0 && recent.length < Math.max(0, limit); i -= 1) {
+    const id = activities[i].questionId;
+    if (!id || id === currentId || seen.has(id)) continue;
+    seen.add(id);
+    recent.push(id);
+  }
+  return recent;
+}
+
+/**
+ * Uniformly pick from candidates outside the recent-question cooldown. If the bank
+ * is small, relax the oldest cooldown entries until at least one alternative remains.
+ * The current question is never selected again unless it is literally the only option.
+ */
+export function pickQuestionWithCooldown(candidates = [], currentQuestionId = null, history = [], recentQuestionTrail = [], random = Math.random, cooldownSize = RECENT_QUESTION_COOLDOWN) {
+  const unique = new Map();
+  for (const question of candidates || []) {
+    if (question?.id && Array.isArray(question.options) && question.options.length) {
+      if (!unique.has(String(question.id))) unique.set(String(question.id), question);
+    }
+  }
+  const all = [...unique.values()];
+  if (!all.length) return null;
+  const currentId = currentQuestionId == null ? null : String(currentQuestionId);
+  const alternatives = all.filter((question) => String(question.id) !== currentId);
+  if (!alternatives.length) return all[0];
+
+  const recentIds = getRecentQuestionIds(history, recentQuestionTrail, currentId, cooldownSize);
+  for (let cooldown = recentIds.length; cooldown >= 0; cooldown -= 1) {
+    const blocked = new Set(recentIds.slice(0, cooldown));
+    const fresh = alternatives.filter((question) => !blocked.has(String(question.id)));
+    if (fresh.length) {
+      const value = Math.max(0, Math.min(0.999999999, random()));
+      return fresh[Math.floor(value * fresh.length)];
+    }
+  }
+  return alternatives[0];
+}
+
+/**
+ * Random question selection with a 30% active-recall branch and a 10-distinct-question
+ * cooldown. Latest-wrong questions get 72% of the recall branch and latest-correct
+ * questions get 28% when both fresh pools exist. Normal picks remain uniform across
+ * the full fresh bank. The cooldown relaxes automatically for small banks.
+ */
+export function pickQuestionWithActiveRecall(
+  questionBank,
+  history = [],
+  currentQuestionId = null,
+  random = Math.random,
+  reviewChance = 0.3,
+  recentQuestionTrail = [],
+  cooldownSize = RECENT_QUESTION_COOLDOWN,
+) {
   const questionsById = new Map();
   for (const question of questionBank || []) {
-    if (question?.id) questionsById.set(question.id, question);
-  }
-
-  const attemptsById = new Map();
-  for (const attempt of history || []) {
-    if (!attempt?.questionId) continue;
-    if (!attemptsById.has(attempt.questionId)) attemptsById.set(attempt.questionId, []);
-    attemptsById.get(attempt.questionId).push(attempt);
-    if (!questionsById.has(attempt.questionId) && attempt.questionSnapshot?.id) {
-      questionsById.set(attempt.questionId, attempt.questionSnapshot);
+    if (question?.id && Array.isArray(question.options) && question.options.length) {
+      questionsById.set(String(question.id), question);
     }
   }
 
-  const pastQuestions = [...attemptsById.entries()]
-    .map(([id, attempts]) => ({ id, attempts, question: questionsById.get(id) }))
-    .filter((item) => item.id !== currentQuestionId && item.question?.options?.length);
-
-  const needsReview = pastQuestions.filter((item) => !item.attempts[item.attempts.length - 1]?.isCorrect);
-  const previouslySolved = pastQuestions.filter((item) => item.attempts[item.attempts.length - 1]?.isCorrect);
-  const bankAlternatives = (questionBank || []).filter((question) => question?.id !== currentQuestionId);
-
-  const choose = (items) => items[Math.min(items.length - 1, Math.floor(Math.max(0, Math.min(0.999999999, random())) * items.length))];
-
-  if (pastQuestions.length && random() < reviewChance) {
-    let recallPool;
-    if (needsReview.length && previouslySolved.length) recallPool = random() < 0.72 ? needsReview : previouslySolved;
-    else recallPool = needsReview.length ? needsReview : previouslySolved;
-    if (recallPool.length) return choose(recallPool).question;
+  const orderedHistory = (history || []).map((attempt, index) => ({ attempt, index }))
+    .filter(({ attempt }) => attempt?.questionId)
+    .sort((a, b) => timestampOf(a.attempt, a.index + 1) - timestampOf(b.attempt, b.index + 1) || a.index - b.index);
+  const latestAttemptById = new Map();
+  for (const { attempt } of orderedHistory) {
+    const id = String(attempt.questionId);
+    latestAttemptById.set(id, attempt);
+    if (!questionsById.has(id) && attempt.questionSnapshot?.id && Array.isArray(attempt.questionSnapshot.options) && attempt.questionSnapshot.options.length) {
+      questionsById.set(id, attempt.questionSnapshot);
+    }
   }
 
-  if (bankAlternatives.length) return choose(bankAlternatives);
-  if (pastQuestions.length) return choose(pastQuestions).question;
-  return (questionBank || [])[0] || null;
+  const allQuestions = [...questionsById.values()];
+  const currentId = currentQuestionId == null ? null : String(currentQuestionId);
+  const selectable = [];
+  const recentIds = getRecentQuestionIds(history, recentQuestionTrail, currentId, cooldownSize);
+  const candidates = allQuestions.filter((question) => String(question.id) !== currentId);
+  if (!candidates.length) return allQuestions[0] || null;
+
+  // Same cooldown rule as ordinary selection; it relaxes only if too few alternatives remain.
+  for (let cooldown = recentIds.length; cooldown >= 0; cooldown -= 1) {
+    const blocked = new Set(recentIds.slice(0, cooldown));
+    const fresh = candidates.filter((question) => !blocked.has(String(question.id)));
+    if (fresh.length) {
+      selectable.push(...fresh);
+      break;
+    }
+  }
+  if (!selectable.length) selectable.push(...candidates);
+
+  const latestWrong = [];
+  const latestCorrect = [];
+  for (const question of selectable) {
+    const latest = latestAttemptById.get(String(question.id));
+    if (!latest) continue;
+    if (latest.isCorrect) latestCorrect.push(question);
+    else latestWrong.push(question);
+  }
+
+  const choose = (items) => {
+    if (!items.length) return null;
+    const value = Math.max(0, Math.min(0.999999999, random()));
+    return items[Math.floor(value * items.length)];
+  };
+
+  if ((latestWrong.length || latestCorrect.length) && random() < reviewChance) {
+    if (latestWrong.length && latestCorrect.length) {
+      return choose(random() < 0.72 ? latestWrong : latestCorrect) || choose(selectable);
+    }
+    return choose(latestWrong.length ? latestWrong : latestCorrect) || choose(selectable);
+  }
+
+  return choose(selectable) || candidates[0] || allQuestions[0] || null;
 }
 
 /** XP rules: unseen correct question = 25 XP; any correct repeat = 5 XP; misses = 5 XP. */

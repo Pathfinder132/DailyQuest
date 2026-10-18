@@ -24,6 +24,7 @@ import {
   onSnapshot,
   serverTimestamp,
   setDoc,
+  updateDoc,
   writeBatch,
 } from 'firebase/firestore';
 
@@ -141,6 +142,7 @@ function normalizedStats(profile = {}) {
       totalCorrect: Number(profile.stats.totalCorrect || 0),
       activeDays: Array.isArray(profile.stats.activeDays) ? profile.stats.activeDays : [],
       potdCompletedDates: Array.isArray(profile.stats.potdCompletedDates) ? profile.stats.potdCompletedDates : [],
+      recentQuestionTrail: Array.isArray(profile.stats.recentQuestionTrail) ? profile.stats.recentQuestionTrail : [],
       ...(profile.stats.leveling && Number.isFinite(profile.stats.leveling.baseXp) && Number.isFinite(profile.stats.leveling.baseLevel)
         ? { leveling: { baseXp: profile.stats.leveling.baseXp, baseLevel: profile.stats.leveling.baseLevel, version: profile.stats.leveling.version || 1 } }
         : {}),
@@ -152,6 +154,7 @@ function normalizedStats(profile = {}) {
     totalCorrect: Number(profile.totalCorrect || 0),
     activeDays: Array.isArray(profile.activeDays) ? profile.activeDays : [],
     potdCompletedDates: Array.isArray(profile.potdCompletedDates) ? profile.potdCompletedDates : [],
+    recentQuestionTrail: Array.isArray(profile.recentQuestionTrail) ? profile.recentQuestionTrail : [],
     ...(profile.leveling && Number.isFinite(profile.leveling.baseXp) && Number.isFinite(profile.leveling.baseLevel)
       ? { leveling: { baseXp: profile.leveling.baseXp, baseLevel: profile.leveling.baseLevel, version: profile.leveling.version || 1 } }
       : {}),
@@ -269,6 +272,18 @@ export async function syncQuestionsToFirestore(user, questions, stats) {
   if (stats) operations.push({ ref: doc(db, 'users', user.uid), data: profilePayload(user, stats) });
   await commitInChunks(db, operations);
   return { synced: true, operationCount: operations.length };
+}
+
+
+/** Update only the current user's recent-question trail; do not rewrite their full history per selection. */
+export async function syncRecentQuestionTrailToFirestore(user, trail) {
+  if (!user?.uid || user.isAnonymous) return { synced: false, reason: 'no-google-user' };
+  const { db } = await getFirebaseClient();
+  await updateDoc(doc(db, 'users', user.uid), {
+    'stats.recentQuestionTrail': cleanForFirestore(Array.isArray(trail) ? trail.slice(-40) : []),
+    updatedAt: serverTimestamp(),
+  });
+  return { synced: true };
 }
 
 /** Subscribe to this user's own profile, attempts, and imported questions for live multi-device updates. */

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
 import { Activity, BarChart3, Cloud, Flame, Home as HomeIcon, Lightbulb, LogOut, RefreshCw, Sparkles, Wrench } from 'lucide-react';
 import { DEFAULT_QUESTIONS } from './data/questions.js';
@@ -12,7 +12,7 @@ import { EMPTY_STORE, exportProgress, getLegacyMigrationUid, getUserStorageKey, 
 import { isMathAptitudeQuestion, makeMentalMathQuestion, pickMathAptitudeQuestion } from './lib/questionTools.js';
 import { calculateStreak, ensureLevelingProfile, getDailyQuestion, getLastDisplayedOptionOrder, getLevelInfo, localDateKey, makeId, pickQuestionWithActiveRecall, calculateQuestionReward, shuffleOptionsForDisplay } from './lib/utils.js';
 import { playUiSound } from './lib/sounds.js';
-import { isFirebaseConfigured, saveUserStoreToCloud, signInWithGoogle, signOutCurrentUser, subscribeToAuthChanges, subscribeToUserCloudStore, syncAttemptToFirestore, syncQuestionsToFirestore, checkUserCloudProfile } from './lib/firebaseSync.js';
+import { isFirebaseConfigured, saveUserStoreToCloud, signInWithGoogle, signOutCurrentUser, subscribeToAuthChanges, subscribeToUserCloudStore, syncAttemptToFirestore, syncQuestionsToFirestore, syncRecentQuestionTrailToFirestore, checkUserCloudProfile } from './lib/firebaseSync.js';
 
 function popConfetti() {
   confetti({ particleCount: 95, spread: 74, origin: { y: 0.63 }, startVelocity: 34, scalar: 0.9, ticks: 170 });
@@ -113,6 +113,9 @@ export default function App() {
     return shuffleOptionsForDisplay(initialQuestion, getLastDisplayedOptionOrder(store.history, initialQuestion));
   });
   const [optionShuffleRevision, setOptionShuffleRevision] = useState(0);
+  const [questionPresentationNonce, setQuestionPresentationNonce] = useState(0);
+  const trailSyncFingerprintRef = useRef('');
+  const trailRecordFingerprintRef = useRef('');
   const [lastShownOptionOrders, setLastShownOptionOrders] = useState(() => {
     const orders = {};
     for (const attempt of store.history) {
@@ -361,6 +364,42 @@ export default function App() {
     });
   }, [currentQuestion, displayedOptions]);
 
+  // Record each newly presented question (including skipped questions) so the cooldown
+  // applies to what was actually shown, not only to questions the user answered.
+  useEffect(() => {
+    if (!currentQuestion?.id || !['signed-in', 'guest'].includes(authStatus)) return;
+    const presentationFingerprint = `${authUser?.uid || 'guest'}:${questionPresentationNonce}:${currentQuestion.id}`;
+    // React StrictMode replays effects in development; do not record that as two separate views.
+    if (trailRecordFingerprintRef.current === presentationFingerprint) return;
+    trailRecordFingerprintRef.current = presentationFingerprint;
+    const entry = {
+      id: makeId('view'),
+      questionId: String(currentQuestion.id),
+      timestamp: Date.now(),
+    };
+    setStore((previous) => ({
+      ...previous,
+      stats: {
+        ...previous.stats,
+        recentQuestionTrail: [...(previous.stats.recentQuestionTrail || []), entry].slice(-40),
+      },
+    }));
+  }, [currentQuestion?.id, questionPresentationNonce, authStatus, authUser?.uid]);
+
+  // Sync the compact recency trail as one profile-field update. This keeps the same
+  // cooldown useful across devices without re-uploading all attempts on each selection.
+  const trailFingerprint = JSON.stringify(store.stats.recentQuestionTrail || []);
+  useEffect(() => {
+    if (!isCloudUser || !authUser?.uid || !(store.stats.recentQuestionTrail || []).length) return;
+    const fingerprint = `${authUser.uid}:${trailFingerprint}`;
+    if (trailSyncFingerprintRef.current === fingerprint) return;
+    trailSyncFingerprintRef.current = fingerprint;
+    syncRecentQuestionTrailToFirestore(authUser, store.stats.recentQuestionTrail).catch((error) => {
+      console.warn('Recent question trail could not sync; local cooldown history is preserved.', error);
+      setCloudSyncStatus((status) => status === 'synced' ? 'error' : status);
+    });
+  }, [trailFingerprint, isCloudUser, authUser?.uid]);
+
   useEffect(() => {
     if (!toast) return undefined;
     const handle = window.setTimeout(() => setToast(''), 3400);
@@ -469,6 +508,7 @@ export default function App() {
     const nextOptions = shuffleOptionsForDisplay(question, previousOrder);
     const nextOrderIds = nextOptions.map((option) => String(option.id));
     setCurrentQuestion(question);
+    setQuestionPresentationNonce((revision) => revision + 1);
     setDisplayedOptions(nextOptions);
     setLastShownOptionOrders((previous) => ({ ...previous, [question.id]: nextOrderIds }));
     setOptionShuffleRevision((revision) => revision + 1);
@@ -497,7 +537,10 @@ export default function App() {
 
   function handleRandomize() {
     setRandomizing(true);
-    const next = pickQuestionWithActiveRecall(allQuestions, store.history, currentQuestion?.id);
+    const next = pickQuestionWithActiveRecall(
+      allQuestions, store.history, currentQuestion?.id, Math.random, 0.3,
+      store.stats.recentQuestionTrail || [],
+    );
     if (next) {
       presentQuestion(next);
       setPetMood('idle');
@@ -513,7 +556,10 @@ export default function App() {
   function handleGenerateMath() {
     // Imported quantitative aptitude, logical reasoning, and word-problem questions
     // take priority. The procedural generator remains a fallback until that bank exists.
-    const bankQuestion = pickMathAptitudeQuestion(allQuestions, currentQuestion?.id);
+    const bankQuestion = pickMathAptitudeQuestion(
+      allQuestions, currentQuestion?.id, Math.random,
+      store.stats.recentQuestionTrail || [], store.history,
+    );
     const nextQuestion = bankQuestion || makeMentalMathQuestion();
     presentQuestion(nextQuestion);
     setPetMood('idle');

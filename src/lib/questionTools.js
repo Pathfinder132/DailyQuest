@@ -1,4 +1,4 @@
-import { shuffleArray } from './utils.js';
+import { pickQuestionWithCooldown, shuffleArray } from './utils.js';
 
 const LETTERS = ['A', 'B', 'C', 'D'];
 
@@ -80,7 +80,7 @@ export function makeMentalMathQuestion() {
   };
 }
 
-const MATH_APTITUDE_CATEGORY = /\b(math|maths|mathematics|quant|quantitative|aptitude|reasoning|word[- ]based|word problems?|numerical ability|data interpretation|arithmetic|algebra|geometry|number system|probability|statistics|percentage|profit and loss|time and work|speed time distance|mixtures?|ratio|permutation|combination|mensuration|simple interest|compound interest|syllogism|seating arrangement|calendar|clock|blood relation|direction sense|number series)\b/i;
+const MATH_APTITUDE_CATEGORY = /\b(math|maths|mathematics|quant|quantitative|aptitude|reasoning|word[- ]based|word problems?|numerical ability|data interpretation|arithmetic|algebra|geometry|number system|probability|statistics|percentages?|profit and loss|time and work|speed time distance|mixtures?|ratio|permutation|combination|mensuration|simple interest|compound interest|syllogism|seating arrangement|calendar|clock|blood relation|direction sense|number series)\b/i;
 
 /** Match imported math, aptitude, logical-reasoning, and word-problem categories. */
 export function isMathAptitudeQuestion(question) {
@@ -91,14 +91,22 @@ export function isMathAptitudeQuestion(question) {
   return MATH_APTITUDE_CATEGORY.test(categoryMetadata);
 }
 
-/** Pick from a user's imported aptitude bank, avoiding the question currently displayed if possible. */
-export function pickMathAptitudeQuestion(questionBank = [], currentQuestionId = null, random = Math.random) {
+/**
+ * Pick an imported math/aptitude question using the same recency cooldown as the
+ * general randomizer, so hitting Generate Math repeatedly doesn't immediately recycle
+ * the same few aptitude questions. Small banks automatically relax the cooldown.
+ */
+export function pickMathAptitudeQuestion(
+  questionBank = [],
+  currentQuestionId = null,
+  random = Math.random,
+  recentQuestionTrail = [],
+  history = [],
+  cooldownSize = 10,
+) {
   const eligible = (questionBank || []).filter(isMathAptitudeQuestion);
   if (!eligible.length) return null;
-  const alternatives = eligible.filter((question) => question.id !== currentQuestionId);
-  const pool = alternatives.length ? alternatives : eligible;
-  const value = Math.max(0, Math.min(0.999999999, random()));
-  return pool[Math.floor(value * pool.length)] ?? pool[0];
+  return pickQuestionWithCooldown(eligible, currentQuestionId, history, recentQuestionTrail, random, cooldownSize);
 }
 
 /** A stable track classification used by the bank inventory and future question types. */

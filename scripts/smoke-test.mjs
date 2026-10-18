@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { calculateQuestionReward, ensureLevelingProfile, getLastDisplayedOptionOrder, getLevelInfo, pickQuestionWithActiveRecall, shuffleOptionsForDisplay, xpRequiredForLevel } from '../src/lib/utils.js';
+import { calculateQuestionReward, ensureLevelingProfile, getLastDisplayedOptionOrder, getLevelInfo, getRecentQuestionIds, pickQuestionWithActiveRecall, pickQuestionWithCooldown, shuffleOptionsForDisplay, xpRequiredForLevel } from '../src/lib/utils.js';
 import { getQuestionBankTrack, isMathAptitudeQuestion, pickMathAptitudeQuestion, validateQuestionArray } from '../src/lib/questionTools.js';
 import { getLegacyMigrationUid, getUserStorageKey, mergeStores, readStore, setLegacyMigrationUid, storeHasData, writeStore } from '../src/lib/storage.js';
 
@@ -56,13 +56,58 @@ const pick = (values) => {
   const queue = [...values];
   return () => queue.shift() ?? 0;
 };
-assert.equal(pickQuestionWithActiveRecall([q1, q2, q3], combinedHistory, 'q3', pick([0.1, 0.1, 0])).id, 'q1', 'recall branch should favor the latest-wrong question');
-assert.equal(pickQuestionWithActiveRecall([q1, q2, q3], combinedHistory, 'q3', pick([0.1, 0.9, 0])).id, 'q2', 'recall branch should still include latest-correct questions');
-assert.equal(pickQuestionWithActiveRecall([q1, q2, q3], combinedHistory, 'q3', pick([0.8, 0])).id, 'q1', 'ordinary branch should remain random across the bank');
+assert.equal(pickQuestionWithActiveRecall([q1, q2, q3], combinedHistory, 'q3', pick([0.1, 0.1, 0]), 0.3, [], 0).id, 'q1', 'recall branch should favor the latest-wrong question');
+assert.equal(pickQuestionWithActiveRecall([q1, q2, q3], combinedHistory, 'q3', pick([0.1, 0.9, 0]), 0.3, [], 0).id, 'q2', 'recall branch should still include latest-correct questions');
+assert.equal(pickQuestionWithActiveRecall([q1, q2, q3], combinedHistory, 'q3', pick([0.8, 0]), 0.3, [], 0).id, 'q1', 'ordinary branch should remain random across the bank');
 
 const generatedMath = { ...question('math_old'), category: 'Mental Math', source: 'math' };
-assert.equal(pickQuestionWithActiveRecall([q3], [{ questionId: 'math_old', isCorrect: true, questionSnapshot: generatedMath }], 'q3', pick([0.1, 0, 0])).id, 'math_old', 'previous procedural math can be used for recall');
+assert.equal(pickQuestionWithActiveRecall([q3], [{ questionId: 'math_old', isCorrect: true, timestamp: 1, questionSnapshot: generatedMath }], 'q3', pick([0.1, 0, 0]), 0.3, [], 0).id, 'math_old', 'previous procedural math can be used for recall');
 console.log('Warm-up logic smoke tests passed: XP rewards, weighted active recall, random branch, and procedural-math recall.');
+
+// Recency-aware selection: skipped questions count, ordinary picks stay uniform over
+// eligible questions, missed questions are reviewed when fresh, and small banks relax.
+const manyQuestions = Array.from({ length: 20 }, (_, index) => question(`bank_${String(index + 1).padStart(3, '0')}`));
+const recentTenTrail = Array.from({ length: 11 }, (_, index) => ({
+  id: `view_${index + 1}`,
+  questionId: index < 10 ? manyQuestions[index].id : manyQuestions[19].id,
+  timestamp: 1000 + index,
+}));
+const recentDistinct = getRecentQuestionIds([], recentTenTrail, manyQuestions[19].id, 10);
+assert.deepEqual(recentDistinct, manyQuestions.slice(0, 10).map((item) => item.id).reverse(), 'cooldown is based on the ten most recent distinct prior question IDs');
+assert.equal(
+  pickQuestionWithActiveRecall(manyQuestions, [], manyQuestions[19].id, pick([0, 0]), 0, recentTenTrail, 10).id,
+  manyQuestions[10].id,
+  'ordinary random selection starts among candidates outside the last ten questions; it does not take the first bank entries',
+);
+const reviewHistory = [
+  { id: 'attempt-wrong', questionId: manyQuestions[0].id, isCorrect: false, timestamp: 10, questionSnapshot: manyQuestions[0] },
+  { id: 'attempt-right', questionId: manyQuestions[1].id, isCorrect: true, timestamp: 20, questionSnapshot: manyQuestions[1] },
+];
+const recentMiddleTrail = manyQuestions.slice(2, 12).map((item, index) => ({ id: `mid_${index}`, questionId: item.id, timestamp: 100 + index }));
+recentMiddleTrail.push({ id: 'current_view', questionId: manyQuestions[12].id, timestamp: 120 });
+assert.equal(
+  pickQuestionWithActiveRecall(manyQuestions, reviewHistory, manyQuestions[12].id, pick([0.1, 0.1, 0]), 0.3, recentMiddleTrail, 10).id,
+  manyQuestions[0].id,
+  'active recall prefers a fresh latest-wrong question when both incorrect and correct review pools are available',
+);
+assert.equal(
+  pickQuestionWithCooldown([q1, q2], 'q2', [], [{ id: 'only-recent', questionId: 'q1', timestamp: 100 }], pick([0]), 10).id,
+  'q1',
+  'the cooldown relaxes for a small bank rather than returning no question',
+);
+const thousandQuestions = Array.from({ length: 1000 }, (_, index) => question(`large_${String(index + 1).padStart(4, '0')}`));
+assert.equal(
+  pickQuestionWithCooldown(thousandQuestions, null, [], [], () => 0.999999, 0).id,
+  'large_1000',
+  'the selector can reach the end of a 1000-question bank and is not limited to an initial slice',
+);
+assert.equal(
+  pickQuestionWithActiveRecall(thousandQuestions, [], null, () => 0.999999, 0, [], 0).id,
+  'large_1000',
+  'the actual active-recall selector can return the end of a 1000-question bank on a normal random pick',
+);
+console.log('Recency-selection tests passed: ten-question cooldown, random pool remains broad, missed-question priority, small-bank fallback, and full-bank reachability.');
+
 
 
 const importedQuestion = {
@@ -123,6 +168,15 @@ assert.equal(isMathAptitudeQuestion(logicalQuestion), true, 'logical reasoning c
 assert.equal(isMathAptitudeQuestion(wordProblem), true, 'word problem categories are included');
 assert.equal(isMathAptitudeQuestion(q1), false, 'unrelated question categories are not included');
 assert.equal(pickMathAptitudeQuestion([q1, aptitudeQuestion, logicalQuestion], 'apt_001', () => 0).id, 'lr_001', 'math generation selects from the imported category bank and avoids the current item when possible');
+const mathTrail = [
+  { id: 'math-view-1', questionId: 'apt_001', timestamp: 10 },
+  { id: 'math-view-2', questionId: 'lr_001', timestamp: 20 },
+];
+assert.equal(
+  pickMathAptitudeQuestion([aptitudeQuestion, logicalQuestion, wordProblem, { ...question('math_fresh_004'), category: 'Percentages' }], 'word_001', () => 0, mathTrail, [], 10).id,
+  'math_fresh_004',
+  'Generate Math applies the recency cooldown and relaxes only when needed, excluding recently displayed math-bank questions',
+);
 const normalizedWithTags = validateQuestionArray(JSON.stringify([{ ...aptitudeQuestion, tags: ['percentages', 'profit-loss'], topic: 'Profit and Loss' }]), []);
 assert.equal(normalizedWithTags.questions[0].topic, 'Profit and Loss', 'import preserves math topic metadata');
 assert.deepEqual(normalizedWithTags.questions[0].tags, ['percentages', 'profit-loss'], 'import preserves category tags');
@@ -157,6 +211,10 @@ const progressionCacheKey = getUserStorageKey('google-user-level-profile');
 const profileWithLeveling = { ...legacyStore, stats: { ...legacyStore.stats, leveling: { baseXp: 0, baseLevel: 1, version: 1 } } };
 assert.equal(writeStore(profileWithLeveling, progressionCacheKey), true);
 assert.deepEqual(readStore(progressionCacheKey).stats.leveling, profileWithLeveling.stats.leveling, 'local reads preserve the progressive-level anchor');
+const trailCacheKey = getUserStorageKey('google-user-trail-profile');
+const trailProfile = { history: [], customQuestions: [], stats: { xp: 0, totalCorrect: 0, activeDays: [], potdCompletedDates: [], recentQuestionTrail: [{ id: 'view-q1', questionId: 'q1', timestamp: 101 }, { id: 'view-q2', questionId: 'q2', timestamp: 102 }] } };
+assert.equal(writeStore(trailProfile, trailCacheKey), true);
+assert.deepEqual(readStore(trailCacheKey).stats.recentQuestionTrail, trailProfile.stats.recentQuestionTrail, 'recent displayed-question trail survives local-cache reloads');
 setLegacyMigrationUid('google-user-a');
 assert.equal(getLegacyMigrationUid(), 'google-user-a', 'the first Google account claims the legacy cache');
 assert.equal(storeHasData(readStore()), false, 'shared guest cache is cleared after a recoverable backup is made');
@@ -173,6 +231,11 @@ const anchoredMerge = mergeStores(
   { history: [], customQuestions: [], stats: { xp: 1350, totalCorrect: 10, activeDays: [], potdCompletedDates: [] } },
 );
 assert.deepEqual(anchoredMerge.stats.leveling, { baseXp: 1300, baseLevel: 14, version: 1 }, 'profile merge preserves level progression metadata');
+const mergedTrailStore = mergeStores(
+  { history: [], customQuestions: [], stats: { xp: 0, totalCorrect: 0, activeDays: [], potdCompletedDates: [], recentQuestionTrail: [{ id: 'view-a', questionId: 'q1', timestamp: 100 }, { id: 'view-b', questionId: 'q2', timestamp: 200 }] } },
+  { history: [], customQuestions: [], stats: { xp: 0, totalCorrect: 0, activeDays: [], potdCompletedDates: [], recentQuestionTrail: [{ id: 'view-b', questionId: 'q2', timestamp: 200 }, { id: 'view-c', questionId: 'q3', timestamp: 300 }] } },
+);
+assert.deepEqual(mergedTrailStore.stats.recentQuestionTrail.map((entry) => entry.id), ['view-a', 'view-b', 'view-c'], 'cloud/local trail merging deduplicates shared selections and preserves chronological order');
 assert.equal(mergeStores(legacyStore, { history: [{ ...legacyStore.history[0], id: 'attempt-2', timestamp: 20, xpEarned: 5 }], customQuestions: [], stats: { xp: 30, totalCorrect: 2, activeDays: [], potdCompletedDates: [] } }).stats.xp, 30, 'merging keeps XP consistent with attempts and saved stats');
 if (existingWindow === undefined) delete globalThis.window;
 else globalThis.window = existingWindow;
