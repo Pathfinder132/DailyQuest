@@ -12,7 +12,8 @@ Meet your pixel companion, solve a quick challenge, review the explanation, and 
 - **Game-like feedback:** Earn XP, build streaks, level up your pixel companion, and enjoy sound and confetti effects.
 - **Personal question banks:** Import JSON banks, review counts by Core, Math & Aptitude, and Project-Based tracks, and export your progress.
 - **Troubleshooting toolkit:** Run safe checks for question IDs, saved history, browser storage, audio support, authentication, and cloud access; download a privacy-conscious diagnostic report.
-- **Google sign-in:** Keep your profile, question history, progress, and imported questions synced with Firebase across devices.
+- **Google sign-in and onboarding:** Choose your pixel partner, set a preferred display name, choose interests across eight built-in topics, and optionally set a daily goal. Edit your profile later; progress syncs across devices through Firebase.
+- **Ready-to-play starter banks:** 400 bundled questions across DSA, SQL, DBMS, Networking, Operating Systems, Web Development, Cloud & DevOps, and Aptitude & Logical Reasoning (50 per topic; mostly medium and medium-hard).
 - **Workspace navigation:** Separate Home, Analytics, and Diagnostics views keep the daily question focused and put deeper stats/tools on their own pages.
 - **Responsive design:** Use the app on desktop, tablet, or mobile.
 

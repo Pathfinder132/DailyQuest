@@ -174,7 +174,7 @@ function makeCloudSnapshot(profileSnapshot, attemptsSnapshot, questionsSnapshot)
     return { ...data, id: data.id || decodeURIComponent(entry.id.slice(2)), source: data.source || 'imported' };
   });
   return {
-    store: { history, customQuestions, stats: normalizedStats(profile) },
+    store: { history, customQuestions, profile: profile.appProfile && typeof profile.appProfile === 'object' ? profile.appProfile : {}, stats: normalizedStats(profile) },
     initialized: profile.cloudInitialized === true,
     hasAnyData: Boolean(profileSnapshot?.exists() || history.length || customQuestions.length),
   };
@@ -199,8 +199,8 @@ export async function loadUserCloudStore(user) {
   return makeCloudSnapshot(profileSnapshot, attemptsSnapshot, questionsSnapshot);
 }
 
-function profilePayload(user, stats) {
-  return {
+function profilePayload(user, stats, appProfile = null) {
+  const payload = {
     uid: user.uid,
     displayName: user.displayName || '',
     email: user.email || '',
@@ -210,6 +210,8 @@ function profilePayload(user, stats) {
     schemaVersion: 2,
     updatedAt: serverTimestamp(),
   };
+  if (appProfile && typeof appProfile === 'object') payload.appProfile = cleanForFirestore(appProfile);
+  return payload;
 }
 
 async function commitInChunks(db, operations) {
@@ -228,7 +230,7 @@ export async function saveUserStoreToCloud(user, store) {
   if (!user?.uid || user.isAnonymous) throw new Error('A Google account is required for cloud sync.');
   const operations = [{
     ref: doc(db, 'users', user.uid),
-    data: profilePayload(user, store.stats),
+    data: profilePayload(user, store.stats, store.profile),
   }];
 
   for (const attempt of store.history || []) {

@@ -4,6 +4,7 @@ const LEGACY_MIGRATION_KEY = `${STORAGE_KEY}:legacy-migrated-to`;
 export const EMPTY_STORE = {
   history: [],
   customQuestions: [],
+  profile: {},
   stats: {
     xp: 0,
     totalCorrect: 0,
@@ -21,6 +22,7 @@ function cloneEmptyStore() {
   return {
     history: [],
     customQuestions: [],
+    profile: {},
     stats: { xp: 0, totalCorrect: 0, activeDays: [], potdCompletedDates: [], recentQuestionTrail: [] },
   };
 }
@@ -34,6 +36,7 @@ export function readStore(storageKey = STORAGE_KEY) {
     return {
       history: Array.isArray(parsed.history) ? parsed.history : [],
       customQuestions: Array.isArray(parsed.customQuestions) ? parsed.customQuestions : [],
+      profile: parsed.profile && typeof parsed.profile === 'object' && !Array.isArray(parsed.profile) ? parsed.profile : {},
       stats: {
         xp: Number.isFinite(parsed.stats?.xp) ? parsed.stats.xp : 0,
         totalCorrect: Number.isFinite(parsed.stats?.totalCorrect) ? parsed.stats.totalCorrect : 0,
@@ -107,8 +110,15 @@ export function mergeStores(...inputStores) {
   const stores = inputStores.filter(Boolean);
   const attemptsById = new Map();
   const questionsById = new Map();
+  const mergedProfile = {};
+  let profileCompleted = false;
 
   for (const store of stores) {
+    const incomingProfile = store.profile && typeof store.profile === 'object' ? store.profile : {};
+    for (const [key, value] of Object.entries(incomingProfile)) {
+      if (value !== undefined) mergedProfile[key] = value;
+    }
+    if (incomingProfile.onboardingCompleted === true) profileCompleted = true;
     for (const attempt of store.history || []) {
       const id = String(attempt?.id || `${attempt?.questionId || 'attempt'}_${attempt?.timestamp || Math.random()}`);
       const incoming = { ...attempt, id };
@@ -183,6 +193,7 @@ export function mergeStores(...inputStores) {
   return {
     history,
     customQuestions,
+    profile: { ...mergedProfile, ...(profileCompleted ? { onboardingCompleted: true } : {}) },
     stats: {
       xp,
       totalCorrect,

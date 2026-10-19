@@ -29,10 +29,10 @@ export default function AuthScreen({
       <div className="auth-layout">
         <section className="auth-hero">
           <div className="auth-kicker"><span /> YOUR OWN BRAIN GYM</div>
-          <h1>Your progress.<br />Your questions.<br /><em>Every device.</em></h1>
-          <p>Sign in once. Keep your solved questions, imported banks, XP and pixel partner with you across desktop and mobile.</p>
+          <h1>Build your brain.<br />One question<br /><em>at a time.</em></h1>
+          <p>Meet your pixel partner, master engineering concepts, and build a daily streak. Your questions and progress travel with your account.</p>
           <div className="auth-pet-card">
-            <div className="auth-pet-copy"><span className="auth-pet-star"><Sparkles size={16} /></span><div><strong>Your brain buddy is waiting.</strong><small>Same pet. Same streak. Wherever you practice.</small></div></div>
+            <div className="auth-pet-copy"><span className="auth-pet-star"><Sparkles size={16} /></span><div><strong>Your next favorite study partner.</strong><small>Choose your companion after you sign in.</small></div></div>
             <PixelPet mood="idle" level={1} messageIndex={1} />
             <div className="auth-cloud-sticker"><Cloud size={16} /> PERSONAL CLOUD SAVE</div>
           </div>
@@ -55,8 +55,8 @@ export default function AuthScreen({
             <>
               <div className="auth-card-icon"><LockKeyhole size={22} /></div>
               <p className="auth-eyebrow">YOUR PERSONAL PROFILE</p>
-              <h2 id="auth-card-title">Pick up where you left off.</h2>
-              <p className="auth-card-description">Use your Google account to keep one private profile across devices. Your browser also keeps a local cache for quick loading.</p>
+              <h2 id="auth-card-title">Start your own quest.</h2>
+              <p className="auth-card-description">Sign in with Google, choose your pixel partner, and pick the name DailyQuest will call you. Your progress syncs across devices.</p>
 
               {error && <div className="auth-error" role="alert"><AlertTriangle size={18} /><span>{error}</span></div>}
 

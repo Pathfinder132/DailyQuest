@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { ACTIVE_RECALL_CHANCE, RECENT_QUESTION_COOLDOWN, applyConfidenceAssessment, calculateQuestionReward, ensureLevelingProfile, evaluateFillInBlankAnswer, getLastDisplayedOptionOrder, getLevelInfo, getRecentQuestionIds, isFillInBlankQuestion, pickQuestionWithActiveRecall, pickQuestionWithCooldown, shuffleOptionsForDisplay, xpRequiredForLevel } from '../src/lib/utils.js';
 import { getQuestionBankTrack, isHardOrSnippetQuestion, isMathAptitudeQuestion, pickMathAptitudeQuestion, validateQuestionArray } from '../src/lib/questionTools.js';
 import { getLegacyMigrationUid, getUserStorageKey, mergeStores, readStore, setLegacyMigrationUid, storeHasData, writeStore } from '../src/lib/storage.js';
+import { STARTER_QUESTIONS, STARTER_TOPICS } from '../src/data/starterBanks.js';
+import { DEFAULT_QUESTIONS } from '../src/data/questions.js';
 
 const question = (id) => ({
   id,
@@ -262,6 +264,31 @@ assert.equal(wrongShakyAttempt.needsReview, true);
 console.log('Confidence scoring tests passed: full/half XP, review queue flags, mastery flags, and idempotent finalization.');
 console.log('New feature tests passed: stable-ID option shuffle, active recall, math/aptitude bank selection, topic/tag import, and project-bank metadata.');
 
+// First-run onboarding has a bundled starter bank, so a new user can practice immediately.
+assert.equal(STARTER_TOPICS.length, 8, 'onboarding exposes eight starter interest categories');
+assert.equal(STARTER_QUESTIONS.length, 400, 'the bundled starter bank has 50 questions per category');
+const defaultIds = new Set(DEFAULT_QUESTIONS.map((item) => item.id));
+assert.equal(STARTER_QUESTIONS.filter((item) => defaultIds.has(item.id)).length, 0, 'starter question IDs do not collide with the original POTD bank');
+const starterIds = new Set();
+for (const topic of STARTER_TOPICS) {
+  const topicQuestions = STARTER_QUESTIONS.filter((item) => item.category === topic.id);
+  assert.equal(topicQuestions.length, 50, `${topic.label} has exactly 50 starter questions`);
+  assert.equal(topicQuestions.filter((item) => item.difficulty === 'Easy').length, 6, `${topic.label} has a few easy questions`);
+  assert.equal(topicQuestions.filter((item) => item.difficulty === 'Medium').length, 24, `${topic.label} mostly has medium questions`);
+  assert.equal(topicQuestions.filter((item) => item.difficulty === 'Medium-Hard').length, 20, `${topic.label} includes medium-hard questions`);
+}
+for (const item of STARTER_QUESTIONS) {
+  assert.ok(!starterIds.has(item.id), `starter question ID ${item.id} is unique`);
+  starterIds.add(item.id);
+  assert.equal(item.options.length, 4, `${item.id} has four options`);
+  assert.ok(item.options.some((option) => option.id === item.correctAnswer), `${item.id} maps to a valid correct option`);
+  assert.ok(item.solution && !/green\(\*undefined\*\)/i.test(item.solution), `${item.id} has a usable solution string`);
+}
+assert.equal(STARTER_QUESTIONS.find((item) => item.id === 'starter_aptitude_014').options.find((option) => option.id === STARTER_QUESTIONS.find((item) => item.id === 'starter_aptitude_014').correctAnswer).text, '48', 'the odd-one-out aptitude answer is 48, not an accidental negative value');
+console.log('Onboarding starter-bank tests passed: 8 categories, 50 questions per topic, level mix, unique IDs, valid answer mapping, and corrected aptitude answer.');
+
+
+
 
 // Storage merge + account-isolation checks do not require Firebase or a browser.
 const existingWindow = globalThis.window;
@@ -286,6 +313,17 @@ const progressionCacheKey = getUserStorageKey('google-user-level-profile');
 const profileWithLeveling = { ...legacyStore, stats: { ...legacyStore.stats, leveling: { baseXp: 0, baseLevel: 1, version: 1 } } };
 assert.equal(writeStore(profileWithLeveling, progressionCacheKey), true);
 assert.deepEqual(readStore(progressionCacheKey).stats.leveling, profileWithLeveling.stats.leveling, 'local reads preserve the progressive-level anchor');
+
+const onboardingProfileKey = getUserStorageKey('google-user-onboarding-profile');
+const onboardingProfile = {
+  history: [], customQuestions: [],
+  profile: { preferredName: 'Alex', selectedPetId: 'brain-buddy', interests: ['DSA', 'SQL'], dailyGoal: 3, onboardingCompleted: true, onboardingVersion: 1 },
+  stats: { xp: 0, totalCorrect: 0, activeDays: [], potdCompletedDates: [] },
+};
+assert.equal(writeStore(onboardingProfile, onboardingProfileKey), true);
+assert.deepEqual(readStore(onboardingProfileKey).profile, onboardingProfile.profile, 'chosen name, companion, topic interests, optional goal, and onboarding completion survive local persistence');
+assert.deepEqual(mergeStores({ ...onboardingProfile, profile: { ...onboardingProfile.profile, preferredName: 'Alex' } }, onboardingProfile).profile, onboardingProfile.profile, 'profile onboarding fields survive multi-source local/cloud merges');
+
 const trailCacheKey = getUserStorageKey('google-user-trail-profile');
 const trailProfile = { history: [], customQuestions: [], stats: { xp: 0, totalCorrect: 0, activeDays: [], potdCompletedDates: [], recentQuestionTrail: [{ id: 'view-q1', questionId: 'q1', timestamp: 101 }, { id: 'view-q2', questionId: 'q2', timestamp: 102 }] } };
 assert.equal(writeStore(trailProfile, trailCacheKey), true);

@@ -1,13 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
-import { Activity, BarChart3, Cloud, Flame, Home as HomeIcon, Lightbulb, LogOut, RefreshCw, Sparkles, Wrench } from 'lucide-react';
+import { Activity, BarChart3, Cloud, Flame, Home as HomeIcon, Lightbulb, LogOut, RefreshCw, Sparkles, UserRound, Wrench } from 'lucide-react';
 import { DEFAULT_QUESTIONS } from './data/questions.js';
+import { STARTER_QUESTIONS, STARTER_TOPICS } from './data/starterBanks.js';
 import PixelPet from './components/PixelPet.jsx';
 import QuestionCard from './components/QuestionCard.jsx';
 import StatsPanel from './components/StatsPanel.jsx';
 import QuestionBankDiagnostics from './components/QuestionBankDiagnostics.jsx';
 import JsonImportDrawer from './components/JsonImportDrawer.jsx';
 import AuthScreen from './components/AuthScreen.jsx';
+import ProfileSetup from './components/ProfileSetup.jsx';
+import { DEFAULT_PET_ID } from './data/pets.js';
 import { EMPTY_STORE, exportProgress, getLegacyMigrationUid, getUserStorageKey, mergeStores, readStore, setLegacyMigrationUid, writeStore } from './lib/storage.js';
 import { isHardOrSnippetQuestion, isMathAptitudeQuestion, makeMentalMathQuestion, pickMathAptitudeQuestion } from './lib/questionTools.js';
 import { ACTIVE_RECALL_CHANCE, RECENT_QUESTION_COOLDOWN, applyConfidenceAssessment, calculateStreak, ensureLevelingProfile, evaluateFillInBlankAnswer, getDailyQuestion, getLastDisplayedOptionOrder, getLevelInfo, isFillInBlankQuestion, localDateKey, makeId, pickQuestionWithActiveRecall, calculateQuestionReward, shuffleOptionsForDisplay } from './lib/utils.js';
@@ -90,6 +93,11 @@ function getFirstName(user) {
   return emailName;
 }
 
+function selectedPetSummary(petId) {
+  if (petId === 'brain-buddy' || !petId) return 'Brain Buddy';
+  return String(petId).replace(/-/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 function stableSerialize(value) {
   if (Array.isArray(value)) return `[${value.map(stableSerialize).join(',')}]`;
   if (value && typeof value === 'object') {
@@ -100,6 +108,7 @@ function stableSerialize(value) {
 
 function cloudNeedsUpload(merged, cloud) {
   if (!cloud.initialized) return true;
+  if (stableSerialize(merged.profile || {}) !== stableSerialize(cloud.store.profile || {})) return true;
   const cloudAttemptIds = new Set(cloud.store.history.map((attempt) => attempt.id));
   if (merged.history.some((attempt) => !cloudAttemptIds.has(attempt.id))) return true;
   const cloudQuestions = new Map(cloud.store.customQuestions.map((question) => [question.id, question]));
@@ -145,6 +154,8 @@ export default function App() {
   const [authRetry, setAuthRetry] = useState(0);
   const [cloudSyncStatus, setCloudSyncStatus] = useState('local');
   const [difficultyFilter, setDifficultyFilter] = useState('all');
+  const [showProfileEditor, setShowProfileEditor] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
   const isCloudUser = authStatus === 'signed-in' && Boolean(authUser?.uid);
   const todayKey = localDateKey();
   const dailyQuestion = useMemo(() => getDailyQuestion(DEFAULT_QUESTIONS, todayKey), [todayKey]);
@@ -215,7 +226,8 @@ export default function App() {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }
 
-  const allQuestions = useMemo(() => [...DEFAULT_QUESTIONS, ...store.customQuestions], [store.customQuestions]);
+  const allBuiltInQuestions = useMemo(() => [...DEFAULT_QUESTIONS, ...STARTER_QUESTIONS], []);
+  const allQuestions = useMemo(() => [...allBuiltInQuestions, ...store.customQuestions], [allBuiltInQuestions, store.customQuestions]);
   const displayQuestion = useMemo(() => currentQuestion ? { ...currentQuestion, options: displayedOptions } : currentQuestion, [currentQuestion, displayedOptions]);
   const selectedState = currentAnswer;
   const selectedOptionId = selectedState?.optionId ?? null;
@@ -301,7 +313,32 @@ export default function App() {
         const legacyStore = canClaimLegacy ? readStore() : EMPTY_STORE;
         // Cloud state is merged with the per-account cache and the old local-only profile.
         // Attempts are deduplicated by ID; question edits use their update timestamp.
-        const merged = ensureLevelingProfile(mergeStores(legacyStore, cloud.store, localCache));
+        let merged = ensureLevelingProfile(mergeStores(legacyStore, cloud.store, localCache));
+        const cloudProfileHasOnboardingFlag = Object.prototype.hasOwnProperty.call(cloud.store.profile || {}, 'onboardingCompleted');
+        const localProfileHasOnboardingFlag = Object.prototype.hasOwnProperty.call(localCache.profile || {}, 'onboardingCompleted');
+        const hasPriorAppActivity = Boolean(merged.history.length || merged.customQuestions.length || merged.stats.xp || merged.stats.totalCorrect);
+        // Existing accounts keep working without being forced through the new onboarding.
+        // A new account explicitly stores onboardingCompleted:false before its first save,
+        // so a refresh during onboarding won't accidentally skip the wizard.
+        if (merged.profile?.onboardingCompleted !== true
+          && !(cloudProfileHasOnboardingFlag || localProfileHasOnboardingFlag)
+          && (cloud.initialized || hasPriorAppActivity)) {
+          merged = {
+            ...merged,
+            profile: {
+              ...(merged.profile || {}),
+              preferredName: merged.profile?.preferredName || getFirstName(user) || 'Player',
+              selectedPetId: merged.profile?.selectedPetId || DEFAULT_PET_ID,
+              interests: Array.isArray(merged.profile?.interests) ? merged.profile.interests : [],
+              dailyGoal: Number.isFinite(merged.profile?.dailyGoal) ? merged.profile.dailyGoal : null,
+              onboardingCompleted: true,
+              onboardingVersion: 1,
+              updatedAt: Date.now(),
+            },
+          };
+        } else if (!Object.prototype.hasOwnProperty.call(merged.profile || {}, 'onboardingCompleted')) {
+          merged = { ...merged, profile: { ...(merged.profile || {}), onboardingCompleted: false } };
+        }
         setStore(merged);
         restoreQuestionForProfile(merged);
         writeStore(merged, userKey);
@@ -763,6 +800,34 @@ export default function App() {
     return checkUserCloudProfile(authUser);
   }
 
+  async function handleProfileSave(profile) {
+    const wasEditingProfile = showProfileEditor;
+    setProfileSaving(true);
+    const nextStore = { ...store, profile: { ...profile, updatedAt: Date.now() } };
+    const userKey = isCloudUser && authUser?.uid ? getUserStorageKey(authUser.uid) : undefined;
+    setStore(nextStore);
+    writeStore(nextStore, userKey);
+    try {
+      if (isCloudUser && authUser) {
+        setCloudSyncStatus('syncing');
+        await saveUserStoreToCloud(authUser, nextStore);
+        setCloudSyncStatus('synced');
+      }
+      setToast(profile.onboardingCompleted ? `Profile saved. Welcome, ${profile.preferredName}!` : 'Profile saved.');
+      setShowProfileEditor(false);
+      navigateToPage(wasEditingProfile ? 'analytics' : 'home');
+    } catch (error) {
+      console.error('Profile saved locally but cloud sync failed.', error);
+      setCloudSyncStatus('error');
+      setAuthError(`Your profile is saved on this device, but cloud sync did not finish. ${friendlyFirebaseError(error)}`);
+      setToast('Profile saved locally. Cloud sync will retry when possible.');
+      setShowProfileEditor(false);
+      navigateToPage(wasEditingProfile ? 'analytics' : 'home');
+    } finally {
+      setProfileSaving(false);
+    }
+  }
+
   async function handleGoogleSignIn() {
     setAuthError('');
     setSignInBusy(true);
@@ -779,7 +844,13 @@ export default function App() {
     setAuthError('');
     setAuthUser(null);
     setCloudSyncStatus('local');
-    const localStore = ensureLevelingProfile(readStore());
+    let localStore = ensureLevelingProfile(readStore());
+    if (localStore.profile?.onboardingCompleted !== true
+      && (localStore.history.length || localStore.customQuestions.length || localStore.stats.xp || localStore.stats.totalCorrect)) {
+      localStore = { ...localStore, profile: { ...(localStore.profile || {}), preferredName: localStore.profile?.preferredName || 'Player', selectedPetId: localStore.profile?.selectedPetId || DEFAULT_PET_ID, onboardingCompleted: true, interests: localStore.profile?.interests || [], dailyGoal: localStore.profile?.dailyGoal ?? null, onboardingVersion: 1, updatedAt: Date.now() } };
+    } else if (!Object.prototype.hasOwnProperty.call(localStore.profile || {}, 'onboardingCompleted')) {
+      localStore = { ...localStore, profile: { ...(localStore.profile || {}), onboardingCompleted: false } };
+    }
     setStore(localStore);
     restoreQuestionForProfile(localStore);
     setAuthStatus('guest');
@@ -835,7 +906,12 @@ export default function App() {
     );
   }
 
-  const displayName = isCloudUser ? getFirstName(authUser) : '';
+  const profileNeedsOnboarding = ['signed-in', 'guest'].includes(authStatus) && store.profile?.onboardingCompleted !== true;
+  if (profileNeedsOnboarding) {
+    return <ProfileSetup mode="onboarding" initialProfile={store.profile || {}} saving={profileSaving} onSave={handleProfileSave} />;
+  }
+
+  const displayName = String(store.profile?.preferredName || '').trim() || (isCloudUser ? getFirstName(authUser) : '');
   const displayLabel = displayName || 'Your account';
   const displayInitial = (displayName || authUser?.email || 'U').slice(0, 1).toUpperCase();
   const statusLabel = potdSolved ? 'POTD SOLVED FOR TODAY!' : 'POTD PENDING FOR TODAY';
@@ -849,7 +925,7 @@ export default function App() {
     onExport: handleExport,
     syncMode: isCloudUser ? 'cloud' : 'local',
     questions: allQuestions,
-    builtInQuestions: DEFAULT_QUESTIONS,
+    builtInQuestions: allBuiltInQuestions,
     authStatus,
     firebaseConfigured: isFirebaseConfigured(),
     cloudSyncStatus,
@@ -873,18 +949,16 @@ export default function App() {
 
           <div className="app-header-controls" aria-label="Account and daily streak">
             {isCloudUser ? (
-              <>
+              <div className="auth-user-chip" title={authUser.email || authUser.displayName || 'Signed-in Google account'}>
+                <span className="auth-user-avatar">{authUser.photoURL ? <img src={authUser.photoURL} alt="" referrerPolicy="no-referrer" /> : displayInitial}</span>
+                <span className="auth-user-copy"><strong>{displayLabel}</strong><small className={cloudSyncStatus === 'error' ? 'sync-error-text' : ''}>{cloudSyncStatus === 'synced' ? 'CLOUD SYNCED' : cloudSyncStatus === 'syncing' ? 'SYNCING…' : cloudSyncStatus === 'error' ? 'SYNC ISSUE' : 'GOOGLE ACCOUNT'}</small></span>
+                {cloudSyncStatus === 'error' && <button type="button" className="auth-sync-retry" onClick={handleRetryCloudSync} title={authError || 'Retry cloud sync'} aria-label="Retry cloud sync"><RefreshCw size={13} /></button>}
                 <span className="player-level-chip" title={`Player Level ${level} · ${store.stats.xp} XP`} aria-label={`Player Level ${level}`}>
                   <Sparkles size={14} strokeWidth={2.8} aria-hidden="true" />
                   <span>LVL {level}</span>
                 </span>
-                <div className="auth-user-chip" title={authUser.email || authUser.displayName || 'Signed-in Google account'}>
-                  <span className="auth-user-avatar">{authUser.photoURL ? <img src={authUser.photoURL} alt="" referrerPolicy="no-referrer" /> : displayInitial}</span>
-                  <span className="auth-user-copy"><strong>{displayLabel}</strong><small className={cloudSyncStatus === 'error' ? 'sync-error-text' : ''}>{cloudSyncStatus === 'synced' ? 'CLOUD SYNCED' : cloudSyncStatus === 'syncing' ? 'SYNCING…' : cloudSyncStatus === 'error' ? 'SYNC ISSUE' : 'GOOGLE ACCOUNT'}</small></span>
-                  {cloudSyncStatus === 'error' && <button type="button" className="auth-sync-retry" onClick={handleRetryCloudSync} title={authError || 'Retry cloud sync'} aria-label="Retry cloud sync"><RefreshCw size={13} /></button>}
-                  <button type="button" className="auth-signout-button" onClick={handleSignOut} title="Sign out" aria-label="Sign out"><LogOut size={17} strokeWidth={2.5} /></button>
-                </div>
-              </>
+                <button type="button" className="auth-signout-button" onClick={handleSignOut} title="Sign out" aria-label="Sign out"><LogOut size={17} strokeWidth={2.5} /></button>
+              </div>
             ) : (
               <button type="button" className="auth-mini-chip" onClick={openGoogleSignIn} title="Sign in to sync across devices"><Cloud size={15} /><span>Sign in to sync</span></button>
             )}
@@ -971,8 +1045,12 @@ export default function App() {
 
         {activePage === 'analytics' && (
           <section className="section-page analytics-page" aria-labelledby="analytics-page-title">
-            <div className="page-heading"><span className="page-heading-icon"><BarChart3 size={20} /></span><div><p className="eyebrow">YOUR PRACTICE, MEASURED</p><h1 id="analytics-page-title">Analytics &amp; Progress</h1><p>XP, consistency, accuracy, recent answers, and everything in your question bank.</p></div></div>
+            <div className="page-heading"><span className="page-heading-icon"><BarChart3 size={20} /></span><div className="page-heading-copy"><p className="eyebrow">YOUR PRACTICE, MEASURED</p><h1 id="analytics-page-title">Analytics &amp; Progress</h1><p>XP, consistency, accuracy, recent answers, and everything in your question bank.</p></div><button type="button" className="profile-edit-button" onClick={() => setShowProfileEditor(true)}><UserRound size={16} /> Edit profile</button></div>
             <div className="page-scroll-area analytics-scroll">
+              <section className="profile-summary-card">
+                <div className="profile-summary-avatar"><Sparkles size={20} /></div>
+                <div className="profile-summary-copy"><span className="eyebrow">YOUR DAILYQUEST PROFILE</span><strong>{store.profile?.preferredName || displayLabel}</strong><p>{selectedPetSummary(store.profile?.selectedPetId)} · {Number.isFinite(store.profile?.dailyGoal) ? `${store.profile.dailyGoal} questions/day goal` : 'No daily goal set'}</p><div className="profile-summary-interests">{(store.profile?.interests || []).length ? store.profile.interests.map((interest) => <span key={interest}>{interest}</span>) : <span>No topic interests selected</span>}</div></div>
+              </section>
               <StatsPanel view="analytics" {...analyticsProps} />
             </div>
           </section>
@@ -985,7 +1063,7 @@ export default function App() {
               <QuestionBankDiagnostics
                 mode="diagnostics"
                 questions={allQuestions}
-                builtInQuestions={DEFAULT_QUESTIONS}
+                builtInQuestions={allBuiltInQuestions}
                 customQuestions={store.customQuestions}
                 store={store}
                 authStatus={authStatus}
@@ -1000,6 +1078,7 @@ export default function App() {
       </main>
 
       <JsonImportDrawer open={showImport} onClose={() => setShowImport(false)} existingQuestions={allQuestions} onImport={handleImport} />
+      {showProfileEditor && <ProfileSetup mode="edit" initialProfile={store.profile || {}} saving={profileSaving} onSave={handleProfileSave} onCancel={() => setShowProfileEditor(false)} />}
       {levelUpCelebrations.length > 0 && (
         <div className="level-up-celebration-layer" aria-live="polite" aria-atomic="true">
           {levelUpCelebrations.map((event) => (
