@@ -76,7 +76,7 @@ export default function ProfileSetup({ mode = 'onboarding', initialProfile = {},
   }
 
   const card = (
-    <section className={`profile-setup-card ${editing ? 'profile-setup-card-editor' : ''}`} aria-labelledby="profile-setup-title">
+    <section className={`profile-setup-card profile-setup-card-step-${step} ${editing ? 'profile-setup-card-editor' : ''}`} aria-labelledby="profile-setup-title">
       <div className="profile-setup-progress" aria-label={`Step ${step + 1} of 3`}>
         {steps.map((item, index) => <span key={item.title} className={index <= step ? 'profile-step-progress-active' : ''} />)}
       </div>
@@ -161,7 +161,7 @@ export default function ProfileSetup({ mode = 'onboarding', initialProfile = {},
   }
 
   return (
-    <main className="profile-setup-shell">
+    <main className={`profile-setup-shell profile-setup-shell-step-${step}`}>
       <div className="profile-setup-brand"><span className="brand-mark"><span>U</span><i>✦</i></span><span><strong>DAILY QUEST</strong><small>MAKE IT YOURS / PERSONAL CLOUD</small></span></div>
       <div className="profile-setup-layout">
         <section className="profile-setup-hero">
