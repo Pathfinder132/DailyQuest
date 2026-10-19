@@ -1,4 +1,4 @@
-import { isSelectableQuestion, pickQuestionWithCooldown, shuffleArray } from './utils.js';
+import { RECENT_QUESTION_COOLDOWN, isSelectableQuestion, pickQuestionWithCooldown, shuffleArray } from './utils.js';
 
 const LETTERS = ['A', 'B', 'C', 'D'];
 
@@ -102,7 +102,7 @@ export function pickMathAptitudeQuestion(
   random = Math.random,
   recentQuestionTrail = [],
   history = [],
-  cooldownSize = 10,
+  cooldownSize = RECENT_QUESTION_COOLDOWN,
 ) {
   const eligible = (questionBank || []).filter(isMathAptitudeQuestion);
   if (!eligible.length) return null;

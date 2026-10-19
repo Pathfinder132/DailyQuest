@@ -187,9 +187,11 @@ export function evaluateFillInBlankAnswer(question, response) {
   return Boolean(normalizedResponse && accepted.includes(normalizedResponse));
 }
 
-/** Maximum number of recently displayed, distinct questions to avoid when the bank is large enough. */
-export const RECENT_QUESTION_COOLDOWN = 10;
+/** Keep a wider fresh-question window so review items cannot dominate the session. */
+export const RECENT_QUESTION_COOLDOWN = 25;
 export const RECENT_QUESTION_TRAIL_LIMIT = 40;
+/** Active recall is intentionally occasional; the recency cooldown handles spaced repetition. */
+export const ACTIVE_RECALL_CHANCE = 0.10;
 
 function timestampOf(value, fallback = 0) {
   const stamp = Number(value?.timestamp ?? value?.viewedAt ?? value?.at);
@@ -266,8 +268,8 @@ export function pickQuestionWithCooldown(candidates = [], currentQuestionId = nu
 }
 
 /**
- * Random question selection with a 30% active-recall branch and a 10-distinct-question
- * cooldown. Latest-wrong questions get 72% of the recall branch and latest-correct
+ * Random question selection with an occasional active-recall branch and a 25-question
+ * cooldown. Latest-wrong or shaky questions get 72% of the recall branch and latest-correct
  * questions get 28% when both fresh pools exist. Normal picks remain uniform across
  * the full fresh bank. The cooldown relaxes automatically for small banks.
  */
@@ -276,9 +278,10 @@ export function pickQuestionWithActiveRecall(
   history = [],
   currentQuestionId = null,
   random = Math.random,
-  reviewChance = 0.3,
+  reviewChance = ACTIVE_RECALL_CHANCE,
   recentQuestionTrail = [],
   cooldownSize = RECENT_QUESTION_COOLDOWN,
+  questionSnapshotFilter = () => true,
 ) {
   const questionsById = new Map();
   for (const question of questionBank || []) {
@@ -294,7 +297,9 @@ export function pickQuestionWithActiveRecall(
   for (const { attempt } of orderedHistory) {
     const id = String(attempt.questionId);
     latestAttemptById.set(id, attempt);
-    if (!questionsById.has(id) && isSelectableQuestion(attempt.questionSnapshot)) {
+    if (!questionsById.has(id)
+      && isSelectableQuestion(attempt.questionSnapshot)
+      && questionSnapshotFilter(attempt.questionSnapshot)) {
       questionsById.set(id, attempt.questionSnapshot);
     }
   }

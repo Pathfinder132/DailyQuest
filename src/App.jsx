@@ -10,7 +10,7 @@ import JsonImportDrawer from './components/JsonImportDrawer.jsx';
 import AuthScreen from './components/AuthScreen.jsx';
 import { EMPTY_STORE, exportProgress, getLegacyMigrationUid, getUserStorageKey, mergeStores, readStore, setLegacyMigrationUid, writeStore } from './lib/storage.js';
 import { isHardOrSnippetQuestion, isMathAptitudeQuestion, makeMentalMathQuestion, pickMathAptitudeQuestion } from './lib/questionTools.js';
-import { applyConfidenceAssessment, calculateStreak, ensureLevelingProfile, evaluateFillInBlankAnswer, getDailyQuestion, getLastDisplayedOptionOrder, getLevelInfo, isFillInBlankQuestion, localDateKey, makeId, pickQuestionWithActiveRecall, calculateQuestionReward, shuffleOptionsForDisplay } from './lib/utils.js';
+import { ACTIVE_RECALL_CHANCE, RECENT_QUESTION_COOLDOWN, applyConfidenceAssessment, calculateStreak, ensureLevelingProfile, evaluateFillInBlankAnswer, getDailyQuestion, getLastDisplayedOptionOrder, getLevelInfo, isFillInBlankQuestion, localDateKey, makeId, pickQuestionWithActiveRecall, calculateQuestionReward, shuffleOptionsForDisplay } from './lib/utils.js';
 import { playUiSound } from './lib/sounds.js';
 import { isFirebaseConfigured, saveUserStoreToCloud, signInWithGoogle, signOutCurrentUser, subscribeToAuthChanges, subscribeToUserCloudStore, syncAttemptToFirestore, syncQuestionsToFirestore, syncRecentQuestionTrailToFirestore, checkUserCloudProfile } from './lib/firebaseSync.js';
 
@@ -600,12 +600,25 @@ export default function App() {
     } else {
       playUiSound(confidenceStatus === 'explicit' ? 'confidence' : 'shaky');
     }
-    if (confidenceStatus === 'shaky') {
-      setToast(`Shaky recall saved. +${xpEarned} XP and ${originalAttempt.isCorrect ? 'this question is queued for review.' : 'this question remains in your review queue.'}`);
-    } else if (!originalAttempt.isCorrect) {
-      setToast(`Confidence recorded. +${xpEarned} practice XP; this question remains in your review queue.`);
+    const confidenceSummary = confidenceStatus === 'shaky'
+      ? `Shaky recall saved · +${xpEarned} XP · queued for review.`
+      : !originalAttempt.isCorrect
+        ? `Confidence recorded · +${xpEarned} practice XP · queued for review.`
+        : `Confidence recorded · +${xpEarned} XP${updatedAttempt.mastered ? ' · mastered candidate.' : '.'}`;
+
+    // Confidence is the end of an answer run: immediately advance to a fresh question
+    // using the just-updated history, review flags, difficulty filter, and cooldown.
+    const nextQuestion = selectNextQuestion(nextStore, currentQuestion?.id);
+    if (nextQuestion) {
+      setRandomizing(true);
+      presentQuestion(nextQuestion);
+      setPetMood('idle');
+      setPetMessageIndex(Math.floor(Math.random() * 3));
+      scrollPageToTop();
+      window.setTimeout(() => setRandomizing(false), 520);
+      setToast(`${confidenceSummary} Next question is ready${nextPlayerLevel > previousPlayerLevel ? ` · PLAYER LEVEL ${nextPlayerLevel} UNLOCKED!` : ''}`);
     } else {
-      setToast(`Confidence recorded. +${xpEarned} XP ${updatedAttempt.mastered ? '— marked as a mastered candidate.' : 'secured.'}`);
+      setToast(`${confidenceSummary} No eligible question is available for the current difficulty filter.`);
     }
   }
 
@@ -620,6 +633,23 @@ export default function App() {
     setLastShownOptionOrders((previous) => ({ ...previous, [question.id]: nextOrderIds }));
     setOptionShuffleRevision((revision) => revision + 1);
     setCurrentAnswer(null);
+  }
+
+  function selectNextQuestion(sourceStore = store, excludeQuestionId = currentQuestion?.id) {
+    const candidateBank = difficultyFilter === 'hard'
+      ? allQuestions.filter(isHardOrSnippetQuestion)
+      : allQuestions;
+    if (!candidateBank.length) return null;
+    return pickQuestionWithActiveRecall(
+      candidateBank,
+      sourceStore.history || [],
+      excludeQuestionId,
+      Math.random,
+      ACTIVE_RECALL_CHANCE,
+      sourceStore.stats?.recentQuestionTrail || [],
+      RECENT_QUESTION_COOLDOWN,
+      (question) => difficultyFilter !== 'hard' || isHardOrSnippetQuestion(question),
+    );
   }
 
   function scrollPageToTop() {
@@ -651,10 +681,7 @@ export default function App() {
       setToast('No Hard / Interview Snippet questions are in your bank yet. Import some or switch the filter to All.');
       return;
     }
-    const next = pickQuestionWithActiveRecall(
-      candidateBank, store.history, currentQuestion?.id, Math.random, 0.3,
-      store.stats.recentQuestionTrail || [],
-    );
+    const next = selectNextQuestion(store, currentQuestion?.id);
     if (next) {
       presentQuestion(next);
       setPetMood('idle');
@@ -850,6 +877,10 @@ export default function App() {
                 <span className="auth-user-avatar">{authUser.photoURL ? <img src={authUser.photoURL} alt="" referrerPolicy="no-referrer" /> : displayInitial}</span>
                 <span className="auth-user-copy"><strong>{displayLabel}</strong><small className={cloudSyncStatus === 'error' ? 'sync-error-text' : ''}>{cloudSyncStatus === 'synced' ? 'CLOUD SYNCED' : cloudSyncStatus === 'syncing' ? 'SYNCING…' : cloudSyncStatus === 'error' ? 'SYNC ISSUE' : 'GOOGLE ACCOUNT'}</small></span>
                 {cloudSyncStatus === 'error' && <button type="button" className="auth-sync-retry" onClick={handleRetryCloudSync} title={authError || 'Retry cloud sync'} aria-label="Retry cloud sync"><RefreshCw size={13} /></button>}
+                <span className="player-level-chip" title={`Player Level ${level} · ${store.stats.xp} XP`} aria-label={`Player Level ${level}`}>
+                  <Sparkles size={14} strokeWidth={2.8} aria-hidden="true" />
+                  <span>LVL {level}</span>
+                </span>
                 <button type="button" className="auth-signout-button" onClick={handleSignOut} title="Sign out" aria-label="Sign out"><LogOut size={17} strokeWidth={2.5} /></button>
               </div>
             ) : (

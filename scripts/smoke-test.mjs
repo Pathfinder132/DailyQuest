@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { applyConfidenceAssessment, calculateQuestionReward, ensureLevelingProfile, evaluateFillInBlankAnswer, getLastDisplayedOptionOrder, getLevelInfo, getRecentQuestionIds, isFillInBlankQuestion, pickQuestionWithActiveRecall, pickQuestionWithCooldown, shuffleOptionsForDisplay, xpRequiredForLevel } from '../src/lib/utils.js';
+import { ACTIVE_RECALL_CHANCE, RECENT_QUESTION_COOLDOWN, applyConfidenceAssessment, calculateQuestionReward, ensureLevelingProfile, evaluateFillInBlankAnswer, getLastDisplayedOptionOrder, getLevelInfo, getRecentQuestionIds, isFillInBlankQuestion, pickQuestionWithActiveRecall, pickQuestionWithCooldown, shuffleOptionsForDisplay, xpRequiredForLevel } from '../src/lib/utils.js';
 import { getQuestionBankTrack, isHardOrSnippetQuestion, isMathAptitudeQuestion, pickMathAptitudeQuestion, validateQuestionArray } from '../src/lib/questionTools.js';
 import { getLegacyMigrationUid, getUserStorageKey, mergeStores, readStore, setLegacyMigrationUid, storeHasData, writeStore } from '../src/lib/storage.js';
 
@@ -106,7 +106,7 @@ assert.equal(
   'large_1000',
   'the actual active-recall selector can return the end of a 1000-question bank on a normal random pick',
 );
-console.log('Recency-selection tests passed: ten-question cooldown, random pool remains broad, missed-question priority, small-bank fallback, and full-bank reachability.');
+console.log('Recency-selection tests passed: 25-question cooldown, occasional active recall, random pool remains broad, missed-question priority, small-bank fallback, and full-bank reachability.');
 
 
 
@@ -220,7 +220,29 @@ const reviewAwarePick = pickQuestionWithActiveRecall(
   0,
 );
 assert.equal(reviewAwarePick.id, 'shaky_right', 'correct-but-shaky answers join the active recall review-priority pool');
+const filteredSnapshotPick = pickQuestionWithActiveRecall(
+  [{ ...question('hard_in_bank'), difficulty: 'Hard' }],
+  [{ questionId: 'easy_old', isCorrect: false, timestamp: 10, questionSnapshot: { ...question('easy_old'), difficulty: 'Easy' } }],
+  'not-current', () => 0, 1, [], 0,
+  (candidate) => String(candidate.difficulty).toLowerCase() === 'hard',
+);
+assert.equal(filteredSnapshotPick.id, 'hard_in_bank', 'historical snapshots cannot bypass the active difficulty filter');
 console.log('Typed-question tests passed: importer normalization, accepted answer matching, explanation aliasing, and hard/snippet filter.');
+
+// Question cooldown should keep recently displayed questions away for 25 distinct picks,
+// while active recall remains occasional rather than dominating new-question discovery.
+assert.equal(RECENT_QUESTION_COOLDOWN, 25, 'recent-question cooldown is wide enough to reduce repetitive sessions');
+assert.equal(ACTIVE_RECALL_CHANCE, 0.10, 'active recall is an occasional 10% branch');
+const cooldownBank = Array.from({ length: 40 }, (_, index) => question(`cooldown_${index}`));
+const cooldownTrail = Array.from({ length: 25 }, (_, index) => ({
+  id: `view_${index}`, questionId: `cooldown_${index}`, timestamp: 1000 + index,
+}));
+const firstFresh = pickQuestionWithActiveRecall(
+  cooldownBank, [], 'outside-bank', () => 0, 0.10, cooldownTrail, RECENT_QUESTION_COOLDOWN,
+);
+assert.equal(firstFresh.id, 'cooldown_25', 'recent 25 distinct question IDs are excluded when the bank has fresh alternatives');
+const repeatedRecentIds = getRecentQuestionIds([], cooldownTrail, 'outside-bank', RECENT_QUESTION_COOLDOWN);
+assert.equal(repeatedRecentIds.length, 25, 'the recent trail counts distinct displayed questions, including skipped ones');
 
 const explicitAttempt = applyConfidenceAssessment({ id:'conf-1', baseXpEarned:25, isCorrect:true }, 'explicit', 1000);
 assert.equal(explicitAttempt.xpEarned, 25, 'explicit correct answer awards full base XP');
