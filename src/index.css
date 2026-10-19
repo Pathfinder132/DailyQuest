@@ -2342,29 +2342,29 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #15b8d2; outli
 }
 
 
-/* Player level is distinct from the pet level and stays visible beside sign-out. */
+/* Player level sits outside and immediately left of the complete account/sync/logout shell. */
 .player-level-chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
-  min-height: 29px;
-  padding: 5px 8px;
+  min-height: 34px;
+  padding: 6px 10px;
   flex: 0 0 auto;
   border: 1.5px solid #a58aff;
   border-radius: 999px;
   background: linear-gradient(135deg, #fff9a8 0%, #f0e8ff 58%, #d9fff4 100%);
   box-shadow: 1px 2px 0 rgba(49, 31, 92, .15);
   color: #3b236d;
-  font: 900 9px 'DM Mono', monospace;
+  font: 900 10px 'DM Mono', monospace;
   letter-spacing: .025em;
   white-space: nowrap;
 }
 .player-level-chip svg { width: 14px; height: 14px; color: #6b35f4; }
 @media (max-width: 900px) {
-  .app-header-controls .player-level-chip { min-height: 27px; gap: 3px; padding: 4px 6px; font-size: 8px; }
+  .app-header-controls .player-level-chip { min-height: 30px; gap: 3px; padding: 5px 7px; font-size: 9px; }
   .app-header-controls .player-level-chip svg { width: 12px; height: 12px; }
 }
 @media (max-width: 600px) {
-  .app-header-controls .player-level-chip { min-height: 26px; gap: 2px; padding: 4px 5px; font-size: 7px; }
+  .app-header-controls .player-level-chip { min-height: 28px; gap: 2px; padding: 4px 6px; font-size: 8px; }
 }
