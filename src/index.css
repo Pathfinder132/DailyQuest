@@ -2758,3 +2758,76 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #15b8d2; outli
   .app-header-controls > .player-level-chip { min-height: 25px; padding: 3px 5px; font-size: 7px; gap: 2px; }
   .app-header-controls > .player-level-chip svg { width: 11px; height: 11px; }
 }
+
+/* Full-screen onboarding layout: use available monitor width rather than a centered max-width island. */
+@media (min-width: 901px) {
+  .auth-shell {
+    box-sizing: border-box;
+    min-height: 100dvh;
+    padding: clamp(18px, 2.2vh, 30px) clamp(24px, 3.1vw, 64px) clamp(14px, 1.8vh, 24px);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .auth-top-mark, .auth-footer { width: 100%; max-width: none; }
+  .auth-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(420px, 0.78fr);
+    gap: clamp(30px, 4vw, 80px);
+    align-items: stretch;
+    width: 100%;
+    max-width: none;
+    flex: 1;
+    min-height: 0;
+    padding: clamp(18px, 3vh, 42px) 0;
+  }
+  .auth-hero { display:flex; flex-direction:column; justify-content:space-between; min-height:0; }
+  .auth-hero h1 { font-size: clamp(48px, 4.4vw, 82px); }
+  .auth-hero > p { max-width: 780px; font-size: clamp(17px, 1.15vw, 22px); }
+  .auth-pet-card { width:100%; max-width:none; flex:1; min-height:220px; margin-top:clamp(20px, 3vh, 40px); grid-template-columns:minmax(0,1fr) minmax(200px, .58fr); padding:clamp(18px, 2vw, 34px); }
+  .auth-pet-card .pet-avatar-wrap { height:clamp(120px, 19vh, 210px); width:clamp(160px, 17vw, 250px); }
+  .auth-pet-card .pet-pixels { transform:scale(clamp(1.15, 1.6vw, 1.55)); }
+  .auth-pet-copy strong { font-size:clamp(15px, 1.1vw, 20px); }
+  .auth-pet-copy small { font-size:clamp(12px, .85vw, 16px); }
+  .auth-card { display:flex; flex-direction:column; justify-content:center; width:100%; height:100%; box-sizing:border-box; padding:clamp(30px, 3vw, 54px); }
+  .auth-card h2 { font-size:clamp(30px, 2.3vw, 44px); }
+  .auth-card-description, .auth-loading p { font-size:clamp(15px, 1vw, 19px); }
+  .google-signin-button { min-height:clamp(60px, 7vh, 76px); font-size:clamp(15px, 1vw, 18px); }
+
+  .profile-setup-shell {
+    grid-template-rows: auto minmax(0, 1fr);
+    width:100%; height:100dvh; min-height:0;
+    padding:clamp(14px, 2vh, 28px) clamp(24px, 3vw, 64px) clamp(14px, 2vh, 26px);
+    gap:clamp(10px, 1.8vh, 24px);
+  }
+  .profile-setup-brand { width:100%; max-width:none; min-height:44px; }
+  .profile-setup-layout {
+    grid-template-columns:minmax(0, 5fr) minmax(0, 7fr);
+    grid-template-rows:minmax(0, 1fr);
+    align-items:stretch; gap:clamp(24px, 3vw, 64px);
+    width:100%; max-width:none; height:100%; min-height:0;
+    padding:clamp(8px, 1.5vh, 22px) 0 4px;
+  }
+  .profile-setup-hero { justify-content:space-between; padding:clamp(8px, 1vh, 18px) 0; }
+  .profile-setup-hero h2 { font-size:clamp(44px, 4.4vw, 82px); margin:clamp(12px, 2vh, 26px) 0; }
+  .profile-setup-hero > p { max-width:unset; font-size:clamp(16px, 1.2vw, 22px); line-height:1.5; }
+  .profile-setup-hero-pet { display:flex; flex:1; flex-direction:column; justify-content:space-between; min-height:0; margin-top:clamp(18px, 3vh, 42px); padding:clamp(20px, 2vw, 38px); }
+  .profile-setup-hero-pet .pet-card { max-width:unset; flex:1; display:flex; flex-direction:column; justify-content:center; }
+  .profile-setup-hero-pet .pet-avatar-wrap { height:clamp(140px, 22vh, 250px); width:clamp(200px, 21vw, 320px); }
+  .profile-setup-hero-pet .pet-pixels { transform:scale(clamp(1.25, 1.8vw, 1.8)); }
+  .profile-setup-hero-note { font-size:clamp(12px, .9vw, 16px); padding-top:clamp(12px, 1.5vh, 20px); }
+  .profile-setup-card { display:flex; flex-direction:column; justify-content:space-between; height:100%; max-height:100%; min-height:0; box-sizing:border-box; padding:clamp(24px, 2.6vw, 48px); overflow:auto; }
+  .profile-setup-card h1 { font-size:clamp(30px, 2.5vw, 46px); }
+  .profile-setup-description { font-size:clamp(15px, 1.1vw, 20px); line-height:1.5; }
+  .profile-setup-eyebrow { font-size:clamp(10px, .75vw, 13px); }
+  .profile-setup-card-step-0 .pet-choice-grid { flex:1; align-items:stretch; gap:clamp(10px, 1vw, 18px); }
+  .profile-setup-card-step-0 .pet-choice-card { justify-content:space-between; padding:clamp(14px, 1.5vw, 26px); }
+  .profile-setup-card-step-0 .pet-choice-avatar, .profile-setup-card-step-0 .pet-choice-placeholder { height:clamp(110px, 18vh, 200px); }
+  .profile-setup-card-step-0 .pet-choice-avatar .pet-avatar-wrap { height:clamp(76px, 11vh, 130px); width:clamp(110px, 11vw, 180px); }
+  .profile-setup-card-step-0 .pet-choice-avatar .pet-pixels { transform:scale(clamp(.9, 1.15vw, 1.25)); }
+  .profile-setup-card-step-0 .pet-choice-copy strong { font-size:clamp(14px, 1vw, 19px); }
+  .profile-setup-card-step-0 .pet-choice-copy span { font-size:clamp(12px, .85vw, 16px); }
+  .profile-setup-card-step-0 .pet-choice-copy small { font-size:clamp(10px, .75vw, 14px); }
+  .profile-setup-card-step-2 .interest-chip-grid { grid-template-columns:repeat(4, minmax(0, 1fr)); gap:clamp(8px, .8vw, 14px); }
+  .profile-setup-card-step-2 .interest-chip { min-height:clamp(48px, 6vh, 68px); padding:clamp(10px, 1.1vw, 20px); font-size:clamp(14px, 1vw, 18px); font-weight:900; }
+  .profile-setup-card-step-2 .daily-goal-option { min-height:clamp(65px, 8vh, 88px); }
+}

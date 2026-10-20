@@ -159,10 +159,18 @@ export default function App() {
   const isCloudUser = authStatus === 'signed-in' && Boolean(authUser?.uid);
   const todayKey = localDateKey();
   const dailyQuestion = useMemo(() => getDailyQuestion(DEFAULT_QUESTIONS, todayKey), [todayKey]);
-  const [currentQuestion, setCurrentQuestion] = useState(() => getLatestPendingConfidenceAttempt(store)?.questionSnapshot || getDailyQuestion(DEFAULT_QUESTIONS, localDateKey()));
+  const [currentQuestion, setCurrentQuestion] = useState(() => {
+    const today = localDateKey();
+    const potd = getDailyQuestion(DEFAULT_QUESTIONS, today);
+    const potdSolved = store.stats.potdCompletedDates.includes(today);
+    return !potdSolved ? potd : (getLatestPendingConfidenceAttempt(store)?.questionSnapshot || potd);
+  });
   const [displayedOptions, setDisplayedOptions] = useState(() => {
-    const pending = getLatestPendingConfidenceAttempt(store);
-    const initialQuestion = pending?.questionSnapshot || getDailyQuestion(DEFAULT_QUESTIONS, localDateKey());
+    const today = localDateKey();
+    const potd = getDailyQuestion(DEFAULT_QUESTIONS, today);
+    const potdSolved = store.stats.potdCompletedDates.includes(today);
+    const pending = potdSolved ? getLatestPendingConfidenceAttempt(store) : null;
+    const initialQuestion = !potdSolved ? potd : (pending?.questionSnapshot || potd);
     return restoreDisplayedOptions(initialQuestion, pending, store.history);
   });
   const [optionShuffleRevision, setOptionShuffleRevision] = useState(0);
@@ -240,9 +248,14 @@ export default function App() {
   const petLevel = Math.floor(store.stats.totalCorrect / 10) + 1;
 
   function restoreQuestionForProfile(profileStore) {
-    const pendingAttempt = getLatestPendingConfidenceAttempt(profileStore);
-    const nextDailyQuestion = pendingAttempt?.questionSnapshot || getDailyQuestion(DEFAULT_QUESTIONS, localDateKey());
-    const savedAttempt = pendingAttempt || getTodayAttempt(profileStore, nextDailyQuestion?.id);
+    const today = localDateKey();
+    const potd = getDailyQuestion(DEFAULT_QUESTIONS, today);
+    const potdSolved = profileStore.stats.potdCompletedDates.includes(today);
+    // POTD is the first priority on each new day. Resume a prior pending session
+    // only after today's POTD has already been completed.
+    const pendingAttempt = potdSolved ? getLatestPendingConfidenceAttempt(profileStore) : null;
+    const nextDailyQuestion = !potdSolved ? potd : (pendingAttempt?.questionSnapshot || potd);
+    const savedAttempt = !potdSolved ? getTodayAttempt(profileStore, potd?.id) : (pendingAttempt || getTodayAttempt(profileStore, nextDailyQuestion?.id));
     setCurrentQuestion(nextDailyQuestion);
     setDisplayedOptions(restoreDisplayedOptions(nextDailyQuestion, savedAttempt, profileStore.history));
     setOptionShuffleRevision((revision) => revision + 1);
