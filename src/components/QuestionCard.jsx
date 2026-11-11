@@ -150,11 +150,17 @@ export default function QuestionCard({
               <h3>Why that answer works</h3>
             </div>
           </div>
-          <p className="solution-copy"><SolutionRenderer text={question.solution || question.explanation || 'Take a moment to review the correct concept, then run it back.'} /></p>
+          <div className="solution-copy"><SolutionRenderer text={question.solution || question.explanation || null} question={question} /></div>
           {question.takeaway && (
             <div className="takeaway-box">
               <span className="takeaway-star">✦</span>
-              <p><strong>LOCK THIS IN</strong><br />{question.takeaway}</p>
+              <p><strong>LOCK THIS IN</strong><br /><SolutionRenderer text={question.takeaway} question={question} /></p>
+            </div>
+          )}
+          {(question.topic || (Array.isArray(question.tags) && question.tags.length > 0)) && (
+            <div className="solution-metadata" aria-label="Question metadata">
+              {question.topic && <span className="solution-meta-topic">TOPIC · {question.topic}</span>}
+              {(Array.isArray(question.tags) ? question.tags : []).filter(Boolean).slice(0, 4).map((tag) => <span className="solution-meta-tag" key={tag}>{tag}</span>)}
             </div>
           )}
           {confidenceEligible && (

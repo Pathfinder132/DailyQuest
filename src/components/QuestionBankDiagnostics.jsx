@@ -19,7 +19,7 @@ import {
   Wifi,
   XCircle,
 } from 'lucide-react';
-import { getQuestionBankTrack } from '../lib/questionTools.js';
+import { getQuestionBankTrack, prepareQuestionBankExport } from '../lib/questionTools.js';
 import { isFillInBlankQuestion } from '../lib/utils.js';
 
 const TRACKS = [
@@ -291,9 +291,12 @@ export default function QuestionBankDiagnostics({
     }
   }
 
-  function exportCustomBank() {
-    downloadJson('dailyquest-imported-question-bank.json', customQuestions);
-    setActionNote(`Downloaded ${customQuestions.length} imported question(s), without progress history.`);
+  function exportCompleteQuestionBank() {
+    const completeBank = prepareQuestionBankExport(questions);
+    const categories = new Set(completeBank.map((question) => String(question?.category || 'Uncategorized')));
+    const importedCount = completeBank.filter((question) => question?.source === 'imported').length;
+    downloadJson('dailyquest-complete-question-bank.json', completeBank);
+    setActionNote(`Downloaded all ${completeBank.length} questions across ${categories.size} categories (${importedCount} imported, ${completeBank.length - importedCount} built-in/starter). Questions are grouped by category; explanations and metadata are preserved. Progress history is not included.`);
   }
 
   async function testCloud() {
@@ -377,7 +380,7 @@ export default function QuestionBankDiagnostics({
             <button type="button" className="qbd-primary-button" onClick={runChecks} disabled={busyAction === 'checks'}><RefreshCw size={16} className={busyAction === 'checks' ? 'qbd-spin' : ''} /> {busyAction === 'checks' ? 'Checking…' : 'Run all checks'}</button>
             <button type="button" onClick={downloadDiagnostics}><Download size={16} /> Download report</button>
             <button type="button" onClick={copyDiagnostics}><Clipboard size={16} /> Copy report</button>
-            <button type="button" onClick={exportCustomBank}><FileJson size={16} /> Export imported bank</button>
+            <button type="button" onClick={exportCompleteQuestionBank}><FileJson size={16} /> Export all questions</button>
             <button type="button" onClick={() => setActionNote(`Environment: ${window.innerWidth} × ${window.innerHeight}px, DPR ${window.devicePixelRatio || 1}. Online: ${navigator.onLine ? 'yes' : 'no'}.`)}><Smartphone size={16} /> View device info</button>
             <button type="button" onClick={testCloud} disabled={!onTestCloud || busyAction === 'cloud'}><Cloud size={16} /> {busyAction === 'cloud' ? 'Testing cloud…' : 'Test cloud connection'}</button>
           </div>

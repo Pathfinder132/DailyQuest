@@ -34,7 +34,7 @@ Google sign-in and cross-device sync require a Firebase project.
 
 1. Create a project in the [Firebase Console](https://console.firebase.google.com/).
 2. Enable **Google** in Authentication and create a Firestore database.
-3. Copy `.env.example` to `.env.local` and fill in your Firebase web app configuration.
+3. Add your Firebase web app configuration to `.env.local` using the required `VITE_FIREBASE_*` variables.
 4. Publish the included `firestore.rules` in your Firebase project's Firestore Rules tab.
 5. Add `localhost` and your deployed site's domain to Firebase Authentication's **Authorized domains**.
 6. Restart the dev server after changing environment variables.

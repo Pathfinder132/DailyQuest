@@ -65,21 +65,63 @@ export function getLevelInfo(totalXp = 0, leveling = null) {
   };
 }
 
-export function getDailyQuestion(questions, dateKey = localDateKey()) {
-  if (!questions.length) return null;
-  // A stable date hash keeps the day's POTD consistent between refreshes.
-  let hash = 0;
-  for (let i = 0; i < dateKey.length; i += 1) hash = (hash * 31 + dateKey.charCodeAt(i)) >>> 0;
-  return questions[hash % questions.length];
+export function normalizeTopicKey(value) {
+  return String(value ?? '').trim().toLocaleLowerCase().replace(/\s+/g, ' ');
 }
 
-export function calculateStreak(activeDays, date = new Date()) {
-  const active = new Set(activeDays || []);
+/**
+ * Build the built-in POTD pool. Valid selected interests strictly limit the pool to
+ * matching categories/topics; empty interests use every built-in question. Unknown selected
+ * interests do not silently broaden the pool: strict topic preferences return an empty pool.
+ */
+export function getPotdQuestionPool(questions = [], preferredTopics = []) {
+  const selected = [...new Set((Array.isArray(preferredTopics) ? preferredTopics : [])
+    .map(normalizeTopicKey).filter(Boolean))].sort();
+  if (!selected.length) return [...questions];
+  return (questions || []).filter((question) =>
+    [question?.category, question?.topic, question?.subCategory].some((value) => selected.includes(normalizeTopicKey(value))),
+  );
+}
+
+/**
+ * Pick a stable daily question from the selected pool. The sorted topic seed ensures
+ * users with the same interests receive the same built-in POTD on the same YYYY-MM-DD.
+ */
+export function getDailyQuestion(questions, dateKey = localDateKey(), topicSeed = 'all-built-in') {
+  if (!Array.isArray(questions) || !questions.length) return null;
+  const input = `${dateKey}|${String(topicSeed || 'all-built-in').trim().toLocaleLowerCase()}`;
+  // FNV-1a 32-bit hash: deterministic across browsers and devices (unlike Math.random).
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return questions[(hash >>> 0) % questions.length];
+}
+
+function dateOffset(date, offsetDays) {
+  const value = new Date(date);
+  value.setDate(value.getDate() + offsetDays);
+  return localDateKey(value);
+}
+
+export function normalizeStreakFreeze(value = {}) {
+  return {
+    available: Boolean(value?.available),
+    protectedDates: [...new Set((Array.isArray(value?.protectedDates) ? value.protectedDates : []).filter((day) => /^\d{4}-\d{2}-\d{2}$/.test(String(day))))].sort(),
+    lastEarnedMilestone: Math.max(0, Math.floor(Number(value?.lastEarnedMilestone) || 0)),
+    earnedAt: value?.earnedAt || null,
+    lastUsedDate: value?.lastUsedDate || null,
+    updatedAt: Math.max(0, Number(value?.updatedAt) || 0),
+  };
+}
+
+/** Current streak includes a one-day gap if it was explicitly protected by a freeze. */
+export function calculateStreak(activeDays, date = new Date(), protectedDates = []) {
+  const active = new Set([...(activeDays || []), ...(protectedDates || [])]);
   const today = localDateKey(date);
-  const yesterdayDate = new Date(date);
-  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-  const yesterday = localDateKey(yesterdayDate);
-  let cursor = active.has(today) ? new Date(date) : active.has(yesterday) ? yesterdayDate : null;
+  const yesterday = dateOffset(date, -1);
+  let cursor = active.has(today) ? new Date(date) : active.has(yesterday) ? new Date(dateOffsetDate(date, -1)) : null;
   if (!cursor) return 0;
 
   let streak = 0;
@@ -88,6 +130,64 @@ export function calculateStreak(activeDays, date = new Date()) {
     cursor.setDate(cursor.getDate() - 1);
   }
   return streak;
+}
+
+function dateOffsetDate(date, offsetDays) {
+  const value = new Date(date);
+  value.setDate(value.getDate() + offsetDays);
+  return value;
+}
+
+/**
+ * Spend one earned freeze only for exactly one missed day (yesterday), when the user was
+ * active the day before yesterday. The protected date is stored separately from activity
+ * so weekly activity charts never pretend the user practiced on a missed day.
+ */
+export function reconcileStreakFreezeForMissedDay(stats = {}, date = new Date()) {
+  const freeze = normalizeStreakFreeze(stats.streakFreeze);
+  if (!freeze.available) return stats.streakFreeze ? stats : { ...stats, streakFreeze: freeze };
+  const activeDays = new Set(Array.isArray(stats.activeDays) ? stats.activeDays : []);
+  const today = localDateKey(date);
+  const yesterday = dateOffset(date, -1);
+  const dayBeforeYesterday = dateOffset(date, -2);
+  if (activeDays.has(dayBeforeYesterday) && !activeDays.has(yesterday) && !freeze.protectedDates.includes(yesterday)) {
+    return {
+      ...stats,
+      streakFreeze: {
+        ...freeze,
+        available: false,
+        protectedDates: [...new Set([...freeze.protectedDates, yesterday])].sort(),
+        lastUsedDate: yesterday,
+        updatedAt: Date.now(),
+      },
+    };
+  }
+  return stats.streakFreeze ? stats : { ...stats, streakFreeze: freeze };
+}
+
+/** Award at most one stored freeze, earned on a 7-day streak milestone. */
+export function grantStreakFreezeForConsistency(stats = {}, date = new Date()) {
+  const freeze = normalizeStreakFreeze(stats.streakFreeze);
+  const streak = calculateStreak(stats.activeDays || [], date, freeze.protectedDates);
+  const earnedMilestone = Math.floor(streak / 7) * 7;
+  if (earnedMilestone <= 0 || earnedMilestone <= freeze.lastEarnedMilestone) {
+    return { stats: stats.streakFreeze ? stats : { ...stats, streakFreeze: freeze }, granted: false, streak };
+  }
+  const canGrant = !freeze.available;
+  return {
+    stats: {
+      ...stats,
+      streakFreeze: {
+        ...freeze,
+        available: freeze.available || canGrant,
+        lastEarnedMilestone: earnedMilestone,
+        earnedAt: canGrant ? localDateKey(date) : freeze.earnedAt,
+        updatedAt: Date.now(),
+      },
+    },
+    granted: canGrant,
+    streak,
+  };
 }
 
 export function shuffleArray(items) {

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
-import { ACTIVE_RECALL_CHANCE, RECENT_QUESTION_COOLDOWN, applyConfidenceAssessment, calculateQuestionReward, ensureLevelingProfile, evaluateFillInBlankAnswer, getLastDisplayedOptionOrder, getLevelInfo, getRecentQuestionIds, isFillInBlankQuestion, pickQuestionWithActiveRecall, pickQuestionWithCooldown, shuffleOptionsForDisplay, xpRequiredForLevel } from '../src/lib/utils.js';
-import { getQuestionBankTrack, isHardOrSnippetQuestion, isMathAptitudeQuestion, pickMathAptitudeQuestion, validateQuestionArray } from '../src/lib/questionTools.js';
-import { getLegacyMigrationUid, getUserStorageKey, mergeStores, readStore, setLegacyMigrationUid, storeHasData, writeStore } from '../src/lib/storage.js';
+import { ACTIVE_RECALL_CHANCE, RECENT_QUESTION_COOLDOWN, applyConfidenceAssessment, calculateQuestionReward, calculateStreak, ensureLevelingProfile, evaluateFillInBlankAnswer, getDailyQuestion, getLastDisplayedOptionOrder, getLevelInfo, getPotdQuestionPool, getRecentQuestionIds, grantStreakFreezeForConsistency, isFillInBlankQuestion, localDateKey, normalizeStreakFreeze, pickQuestionWithActiveRecall, pickQuestionWithCooldown, reconcileStreakFreezeForMissedDay, shuffleOptionsForDisplay, xpRequiredForLevel } from '../src/lib/utils.js';
+import { getQuestionBankTrack, isHardOrSnippetQuestion, isMathAptitudeQuestion, normalizeImportedQuestion, pickMathAptitudeQuestion, prepareQuestionBankExport, validateQuestionArray } from '../src/lib/questionTools.js';
+import { getLegacyMigrationUid, getUserStorageKey, mergeProfilesByFieldTimestamp, mergeStores, readStore, setLegacyMigrationUid, storeHasData, writeStore } from '../src/lib/storage.js';
+import { getPotdHomeSession, isPotdCompletedForToday, selectDailyPotd } from '../src/lib/potd.js';
 import { STARTER_QUESTIONS, STARTER_TOPICS } from '../src/data/starterBanks.js';
 import { DEFAULT_QUESTIONS } from '../src/data/questions.js';
 
@@ -207,6 +208,46 @@ assert.equal(evaluateFillInBlankAnswer(fillBlankWithAliases, 'HAVING'), true, 'a
 assert.throws(() => validateQuestionArray(JSON.stringify([{ id:'fib_invalid', category:'SQL', type:'fill-in-blank', question:'What clause?' }]), []), /needs a correctAnswer or a non-empty acceptedAnswers/);
 assert.equal(isHardOrSnippetQuestion(normalizedFillBlank), true, 'hard fill-in-the-blank questions are included in the interview filter');
 assert.equal(isHardOrSnippetQuestion({ id:'easy_1', difficulty:'Easy', category:'SQL' }), false);
+
+// Custom explanations remain intact through normalization and complete-bank export.
+const structuredCustom = normalizeImportedQuestion({
+  id: 'custom_structured_001', category: 'SQL', difficulty: 'Hard',
+  question: 'Why is HAVING used after aggregation?',
+  options: [{ id: 'A', text: 'After GROUP BY' }, { id: 'B', text: 'Before FROM' }],
+  correctAnswer: 'A', solution: '',
+  explanation: {
+    whyItWorks: 'blue(*HAVING filters groups after aggregation.*)',
+    commonTrap: 'gold(*WHERE filters rows before aggregation.*)',
+    takeaway: 'Use HAVING for aggregate conditions.',
+    realWorldAnalogy: 'green(*It is like filtering department summaries after calculating them.*)',
+  },
+}, 0);
+assert.equal(structuredCustom.solution, '', 'structured explanation without a summary does not receive a generic placeholder');
+assert.equal(structuredCustom.whyItWorks, 'blue(*HAVING filters groups after aggregation.*)');
+assert.equal(structuredCustom.commonTrap, 'gold(*WHERE filters rows before aggregation.*)');
+assert.equal(structuredCustom.takeaway, 'Use HAVING for aggregate conditions.');
+assert.equal(structuredCustom.analogy, 'green(*It is like filtering department summaries after calculating them.*)');
+const explicitExplanationWins = normalizeImportedQuestion({
+  id: 'custom_explanation_alias_001', category: 'SQL', question: 'What does HAVING do?',
+  options: [{ id: 'A', text: 'Filters groups' }, { id: 'B', text: 'Filters rows' }],
+  correctAnswer: 'A', solution: '', explanation: 'blue(*It filters grouped results.*)',
+}, 0);
+assert.equal(explicitExplanationWins.solution, 'blue(*It filters grouped results.*)', 'a non-empty explanation is used when solution is an empty string');
+
+const unsortedExportBank = [
+  { id: 'z1', category: 'Web Development', solution: 'Custom web explanation', source: 'imported' },
+  { id: 'a1', category: 'DBMS', explanation: { summary: 'Custom object explanation' }, source: 'imported' },
+  { id: 'b1', category: 'DBMS', solution: 'Built-in explanation' },
+];
+const sortedExportBank = prepareQuestionBankExport(unsortedExportBank);
+assert.deepEqual(sortedExportBank.map((item) => item.id), ['a1', 'b1', 'z1'], 'complete question exports are sorted by category then ID');
+assert.equal(sortedExportBank[0].explanation.summary, 'Custom object explanation', 'custom structured explanations survive export unchanged');
+assert.equal(sortedExportBank[2].solution, 'Custom web explanation', 'custom solution text survives export unchanged');
+const completeExportFixture = prepareQuestionBankExport([...DEFAULT_QUESTIONS, ...STARTER_QUESTIONS, structuredCustom]);
+assert.equal(completeExportFixture.length, 413, 'complete export includes original built-ins, starters, and imported custom questions');
+assert.ok(completeExportFixture.some((item) => item.id === 'custom_structured_001'), 'complete export includes the custom JSON question');
+assert.ok(completeExportFixture.some((item) => item.id === STARTER_QUESTIONS[0].id), 'complete export includes starter-bank questions');
+console.log('Question export tests passed: full-bank aggregation, category ordering, and custom explanation preservation.');
 const shakyRightQuestion = { ...question('shaky_right'), difficulty: 'Hard' };
 const explicitRightQuestion = { ...question('explicit_right'), difficulty: 'Hard' };
 const reviewAwarePick = pickQuestionWithActiveRecall(
@@ -286,6 +327,102 @@ for (const item of STARTER_QUESTIONS) {
 }
 assert.equal(STARTER_QUESTIONS.find((item) => item.id === 'starter_aptitude_014').options.find((option) => option.id === STARTER_QUESTIONS.find((item) => item.id === 'starter_aptitude_014').correctAnswer).text, '48', 'the odd-one-out aptitude answer is 48, not an accidental negative value');
 console.log('Onboarding starter-bank tests passed: 8 categories, 50 questions per topic, level mix, unique IDs, valid answer mapping, and corrected aptitude answer.');
+
+
+// Daily POTD selection uses all built-in questions and enforces selected topics strictly.
+const allBuiltInBank = [...DEFAULT_QUESTIONS, ...STARTER_QUESTIONS].map((item) => ({ ...item, topic: item.topic || item.category }));
+assert.equal(allBuiltInBank.length, 412, 'POTD bank includes the 12 original questions plus 400 starter questions');
+assert.equal(getPotdQuestionPool(allBuiltInBank, []).length, 412, 'empty preferences use the complete built-in bank');
+assert.equal(getPotdQuestionPool(allBuiltInBank, ['DSA']).length, 50, 'a selected topic strictly filters the POTD pool');
+assert.ok(getPotdQuestionPool(allBuiltInBank, ['DSA']).every((item) => item.category === 'DSA'), 'a topic-filtered POTD pool never leaks unrelated categories');
+assert.equal(getPotdQuestionPool(allBuiltInBank, ['unmapped-topic']).length, 0, 'an unknown non-empty topic never broadens into the full bank');
+const dailyKey = '2026-10-21';
+const dsaSqlPotd = selectDailyPotd(allBuiltInBank, { interests: ['DSA', 'SQL'] }, dailyKey);
+const reorderedPreferencePotd = selectDailyPotd(allBuiltInBank, { interests: ['SQL', 'DSA'] }, dailyKey);
+assert.equal(dsaSqlPotd.id, reorderedPreferencePotd.id, 'topic-seed ordering does not change the daily POTD across devices');
+assert.ok(['DSA', 'SQL'].includes(dsaSqlPotd.category), 'selected topic preferences constrain the daily POTD');
+assert.equal(selectDailyPotd(allBuiltInBank, { interests: [] }, dailyKey).id, getDailyQuestion(allBuiltInBank, dailyKey, 'all-built-in').id, 'no selected topics use a deterministic hash over the full built-in bank');
+assert.equal(selectDailyPotd(allBuiltInBank, { interests: ['unmapped-topic'] }, dailyKey), null, 'POTD returns no unrelated question when preferences cannot be matched');
+
+const potdQuestion = allBuiltInBank.find((item) => item.id === 'starter_dsa_001');
+const pendingPotdAttempt = {
+  id: 'potd-pending-confidence', questionId: potdQuestion.id, questionSnapshot: potdQuestion,
+  timestamp: 1, dateKey: dailyKey, isPotd: true, isCorrect: false, baseXpEarned: 5, xpEarned: 0,
+};
+const pendingPotdSession = getPotdHomeSession({ history: [pendingPotdAttempt], stats: {} }, potdQuestion, dailyKey);
+assert.equal(pendingPotdSession.question.id, potdQuestion.id, 'an unsolved POTD takes priority over an old session');
+assert.equal(pendingPotdSession.attempt.id, pendingPotdAttempt.id, 'an unfinished confidence assessment resumes after reload');
+const finalizedWrongPotd = { ...pendingPotdAttempt, confidenceStatus: 'shaky', confidenceAppliedAt: 2, xpEarned: 2 };
+const retryPotdSession = getPotdHomeSession({ history: [finalizedWrongPotd], stats: {} }, potdQuestion, dailyKey);
+assert.equal(retryPotdSession.question.id, potdQuestion.id, 'a failed POTD stays on screen for a retry');
+assert.equal(retryPotdSession.attempt, null, 'a finalized wrong POTD does not reopen as a permanently locked attempt');
+const solvedPotdStore = {
+  history: [{ ...finalizedWrongPotd, id: 'old-wrong' }, {
+    id: 'potd-correct', questionId: potdQuestion.id, questionSnapshot: potdQuestion, dateKey: dailyKey,
+    isPotd: true, isCorrect: true, confidenceStatus: 'explicit', confidenceAppliedAt: 3,
+  }],
+  stats: { potdCompletedDates: [dailyKey], potdCompletedQuestionIdsByDate: { [dailyKey]: [potdQuestion.id] } },
+};
+assert.equal(isPotdCompletedForToday(solvedPotdStore, potdQuestion, dailyKey), true, 'POTD completion is tied to the question ID for that date');
+assert.equal(getPotdHomeSession(solvedPotdStore, potdQuestion, dailyKey).potdSolved, true, 'a correct daily answer remains completed after reload');
+const correctPendingPotdStore = {
+  history: [{ ...pendingPotdAttempt, id: 'potd-correct-pending-confidence', isCorrect: true }],
+  stats: { potdCompletedDates: [dailyKey], potdCompletedQuestionIdsByDate: { [dailyKey]: [potdQuestion.id] } },
+};
+const correctPendingSession = getPotdHomeSession(correctPendingPotdStore, potdQuestion, dailyKey);
+assert.equal(correctPendingSession.potdSolved, true, 'a correct answer can complete POTD before the confidence assessment is finalized');
+assert.equal(correctPendingSession.attempt.id, 'potd-correct-pending-confidence', 'a correct POTD with unfinished confidence is resumed instead of restoring an older question');
+const switchedPotdQuestion = allBuiltInBank.find((item) => item.id !== potdQuestion.id && item.category === potdQuestion.category);
+assert.equal(isPotdCompletedForToday({ ...solvedPotdStore, history: solvedPotdStore.history, stats: { potdCompletedDates: [dailyKey], potdCompletedQuestionIdsByDate: { [dailyKey]: [potdQuestion.id] } } }, switchedPotdQuestion, dailyKey), false, 'changing the selected POTD topic/question cannot inherit another question ID as solved');
+const legacyDateOnlyHistory = { history: [{ id: 'legacy-potd', questionId: potdQuestion.id, questionSnapshot: potdQuestion, dateKey: dailyKey, isPotd: true, isCorrect: true }], stats: { potdCompletedDates: [dailyKey] } };
+assert.equal(isPotdCompletedForToday(legacyDateOnlyHistory, switchedPotdQuestion, dailyKey), false, 'a legacy date-only summary does not mark a different topic-filtered POTD complete when the old question ID is known');
+console.log('POTD tests passed: full 412-question pool, strict topic preferences, cross-device deterministic hash, pending-confidence resume, retry after wrong answer, and per-question completion tracking.');
+
+// Streak Freeze is earned only after a consistency milestone and protects at most one missed day.
+const testToday = new Date(2026, 9, 21, 12, 0, 0);
+const isoDay = (offset) => { const date = new Date(testToday); date.setDate(date.getDate() + offset); return localDateKey(date); };
+const sevenDayRun = Array.from({ length: 7 }, (_, index) => isoDay(-index));
+assert.equal(calculateStreak(sevenDayRun, testToday, []), 7, 'a seven-day active sequence reaches the first freeze milestone');
+const earnedFreeze = grantStreakFreezeForConsistency({ activeDays: sevenDayRun, streakFreeze: normalizeStreakFreeze() }, testToday);
+assert.equal(earnedFreeze.granted, true, 'consistency grants an available Streak Freeze');
+assert.equal(earnedFreeze.stats.streakFreeze.available, true);
+assert.equal(earnedFreeze.stats.streakFreeze.lastEarnedMilestone, 7);
+const oneGapStats = reconcileStreakFreezeForMissedDay({ activeDays: [isoDay(-2)], streakFreeze: earnedFreeze.stats.streakFreeze }, testToday);
+assert.equal(oneGapStats.streakFreeze.available, false, 'using one freeze consumes it');
+assert.ok(oneGapStats.streakFreeze.protectedDates.includes(isoDay(-1)), 'the single missed day is recorded as protected');
+assert.equal(calculateStreak(oneGapStats.activeDays, testToday, oneGapStats.streakFreeze.protectedDates), 2, 'the protected day keeps the previous streak connected');
+const twoGapStats = reconcileStreakFreezeForMissedDay({ activeDays: [isoDay(-3)], streakFreeze: earnedFreeze.stats.streakFreeze }, testToday);
+assert.equal(twoGapStats.streakFreeze.available, true, 'a freeze is not spent when more than one day was missed');
+console.log('Streak Freeze tests passed: consistency milestone, single-gap protection, consumption, and multi-gap safety.');
+
+// Field-level profile conflict resolution: current remote values survive a newer unrelated
+// global timestamp on a stale cache; a newer explicit edit only wins for its own field.
+const remoteProfile = {
+  preferredName: 'Remote Name', selectedPetId: 'brain-buddy', interests: ['SQL'], dailyGoal: 3,
+  updatedAt: 500, fieldUpdatedAt: { preferredName: 500, selectedPetId: 500, interests: 500, dailyGoal: 500 },
+  fieldTimestampedFields: ['preferredName', 'selectedPetId', 'interests', 'dailyGoal'],
+};
+const staleLocalProfile = { preferredName: 'Old Local Name', selectedPetId: 'old-pet', interests: ['DSA'], dailyGoal: 1, updatedAt: 900 };
+const mergedStale = mergeProfilesByFieldTimestamp(staleLocalProfile, remoteProfile);
+assert.equal(mergedStale.preferredName, 'Remote Name', 'an explicit remote field beats an unversioned local field even if local global updatedAt is newer');
+assert.equal(mergedStale.interests.join(','), 'SQL');
+const legacyZeroTimestampProfile = {
+  preferredName: 'Stale Zero-Timestamp Local', interests: ['DSA'], updatedAt: 900,
+  fieldUpdatedAt: { preferredName: 0, interests: 0 },
+};
+const mergedLegacyZeroTimestamps = mergeProfilesByFieldTimestamp(legacyZeroTimestampProfile, remoteProfile);
+assert.equal(mergedLegacyZeroTimestamps.preferredName, 'Remote Name', 'old zero-valued timestamp placeholders are treated as unversioned legacy fields');
+assert.deepEqual(mergedLegacyZeroTimestamps.interests, ['SQL'], 'legacy zero-timestamp topic preferences cannot override explicit cloud settings');
+const newerLocalEdit = {
+  ...staleLocalProfile,
+  interests: ['Networking'],
+  fieldUpdatedAt: { preferredName: 400, selectedPetId: 400, interests: 1000, dailyGoal: 400 },
+  fieldTimestampedFields: ['preferredName', 'selectedPetId', 'interests', 'dailyGoal'],
+};
+const mergedFieldwise = mergeProfilesByFieldTimestamp(newerLocalEdit, remoteProfile);
+assert.equal(mergedFieldwise.preferredName, 'Remote Name', 'older explicit profile fields do not win due to an unrelated local edit');
+assert.deepEqual(mergedFieldwise.interests, ['Networking'], 'the newer timestamped field edit can still win independently');
+console.log('Profile merge tests passed: per-field timestamps beat stale global timestamps and preserve genuinely newer local field edits.');
 
 
 

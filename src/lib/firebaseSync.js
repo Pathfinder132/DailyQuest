@@ -1,4 +1,6 @@
 import { getApps, initializeApp } from 'firebase/app';
+import { normalizeStreakFreeze } from './utils.js';
+import { mergeProfilesByFieldTimestamp } from './profileMerge.js';
 import {
   browserLocalPersistence,
   getAuth,
@@ -24,8 +26,8 @@ import {
   onSnapshot,
   serverTimestamp,
   setDoc,
-  updateDoc,
   writeBatch,
+  runTransaction,
 } from 'firebase/firestore';
 
 const env = import.meta.env || {};
@@ -135,30 +137,94 @@ function cleanForFirestore(value) {
   return JSON.parse(JSON.stringify(value, (_key, item) => (item === undefined ? undefined : item)));
 }
 
+function numericTimestamp(value) {
+  if (Number.isFinite(value)) return Number(value);
+  if (value && typeof value.toMillis === 'function') return value.toMillis();
+  if (value && Number.isFinite(value.seconds)) return Number(value.seconds) * 1000;
+  return 0;
+}
+
 function normalizedStats(profile = {}) {
-  if (profile.stats && typeof profile.stats === 'object') {
-    return {
-      xp: Number(profile.stats.xp || 0),
-      totalCorrect: Number(profile.stats.totalCorrect || 0),
-      activeDays: Array.isArray(profile.stats.activeDays) ? profile.stats.activeDays : [],
-      potdCompletedDates: Array.isArray(profile.stats.potdCompletedDates) ? profile.stats.potdCompletedDates : [],
-      recentQuestionTrail: Array.isArray(profile.stats.recentQuestionTrail) ? profile.stats.recentQuestionTrail : [],
-      ...(profile.stats.leveling && Number.isFinite(profile.stats.leveling.baseXp) && Number.isFinite(profile.stats.leveling.baseLevel)
-        ? { leveling: { baseXp: profile.stats.leveling.baseXp, baseLevel: profile.stats.leveling.baseLevel, version: profile.stats.leveling.version || 1 } }
-        : {}),
-    };
-  }
-  // Read the old anonymous-sync profile format during the migration window.
+  const stats = profile.stats && typeof profile.stats === 'object' ? profile.stats : profile;
   return {
-    xp: Number(profile.xp || 0),
-    totalCorrect: Number(profile.totalCorrect || 0),
-    activeDays: Array.isArray(profile.activeDays) ? profile.activeDays : [],
-    potdCompletedDates: Array.isArray(profile.potdCompletedDates) ? profile.potdCompletedDates : [],
-    recentQuestionTrail: Array.isArray(profile.recentQuestionTrail) ? profile.recentQuestionTrail : [],
-    ...(profile.leveling && Number.isFinite(profile.leveling.baseXp) && Number.isFinite(profile.leveling.baseLevel)
-      ? { leveling: { baseXp: profile.leveling.baseXp, baseLevel: profile.leveling.baseLevel, version: profile.leveling.version || 1 } }
+    xp: Number(stats.xp || 0),
+    totalCorrect: Number(stats.totalCorrect || 0),
+    activeDays: Array.isArray(stats.activeDays) ? stats.activeDays : [],
+    potdCompletedDates: Array.isArray(stats.potdCompletedDates) ? stats.potdCompletedDates : [],
+    potdCompletedQuestionIdsByDate: stats.potdCompletedQuestionIdsByDate && typeof stats.potdCompletedQuestionIdsByDate === 'object' ? stats.potdCompletedQuestionIdsByDate : {},
+    recentQuestionTrail: Array.isArray(stats.recentQuestionTrail) ? stats.recentQuestionTrail : [],
+    streakFreeze: normalizeStreakFreeze(stats.streakFreeze),
+    ...(stats.leveling && Number.isFinite(stats.leveling.baseXp) && Number.isFinite(stats.leveling.baseLevel)
+      ? { leveling: { baseXp: stats.leveling.baseXp, baseLevel: stats.leveling.baseLevel, version: stats.leveling.version || 1, ...(stats.leveling.updatedAt ? { updatedAt: numericTimestamp(stats.leveling.updatedAt) } : {}) } }
       : {}),
   };
+}
+
+function mergeCloudAppProfile(existing = {}, incoming = {}) {
+  return mergeProfilesByFieldTimestamp(existing, incoming);
+}
+
+function mergeRecentTrails(...trails) {
+  const byId = new Map();
+  let legacyIndex = 0;
+  for (const trail of trails) {
+    for (const entry of Array.isArray(trail) ? trail : []) {
+      const normalized = typeof entry === 'string'
+        ? { id: `legacy-${entry}-${legacyIndex++}`, questionId: entry, timestamp: legacyIndex }
+        : { id: String(entry?.id || `${entry?.questionId || 'view'}-${entry?.timestamp || legacyIndex++}`), questionId: String(entry?.questionId || ''), timestamp: numericTimestamp(entry?.timestamp) };
+      if (!normalized.questionId) continue;
+      const previous = byId.get(normalized.id);
+      if (!previous || normalized.timestamp >= previous.timestamp) byId.set(normalized.id, normalized);
+    }
+  }
+  return [...byId.values()].sort((a, b) => a.timestamp - b.timestamp || a.id.localeCompare(b.id)).slice(-40);
+}
+
+function mergeCloudStats(existingValue = {}, incomingValue = {}) {
+  const existing = normalizedStats({ stats: existingValue });
+  const incoming = normalizedStats({ stats: incomingValue });
+  const existingLevelStamp = numericTimestamp(existing.leveling?.updatedAt);
+  const incomingLevelStamp = numericTimestamp(incoming.leveling?.updatedAt);
+  const leveling = incomingLevelStamp >= existingLevelStamp && incoming.leveling ? incoming.leveling : (existing.leveling || incoming.leveling);
+  const existingFreeze = normalizeStreakFreeze(existing.streakFreeze);
+  const incomingFreeze = normalizeStreakFreeze(incoming.streakFreeze);
+  const freeze = incomingFreeze.updatedAt >= existingFreeze.updatedAt ? incomingFreeze : existingFreeze;
+  return {
+    xp: Math.max(existing.xp, incoming.xp),
+    totalCorrect: Math.max(existing.totalCorrect, incoming.totalCorrect),
+    activeDays: [...new Set([...existing.activeDays, ...incoming.activeDays])].sort(),
+    potdCompletedDates: [...new Set([...existing.potdCompletedDates, ...incoming.potdCompletedDates])].sort(),
+    potdCompletedQuestionIdsByDate: (() => {
+      const idsByDate = new Map();
+      for (const source of [existing.potdCompletedQuestionIdsByDate, incoming.potdCompletedQuestionIdsByDate]) {
+        for (const [day, ids] of Object.entries(source || {})) {
+          if (!idsByDate.has(day)) idsByDate.set(day, new Set());
+          for (const id of Array.isArray(ids) ? ids : []) idsByDate.get(day).add(String(id));
+        }
+      }
+      return Object.fromEntries([...idsByDate.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([day, ids]) => [day, [...ids].sort()]));
+    })(),
+    recentQuestionTrail: mergeRecentTrails(existing.recentQuestionTrail, incoming.recentQuestionTrail),
+    streakFreeze: {
+      ...freeze,
+      protectedDates: [...new Set([...existingFreeze.protectedDates, ...incomingFreeze.protectedDates])].sort(),
+    },
+    ...(leveling ? { leveling } : {}),
+  };
+}
+
+async function mergeAndWriteUserProfile(db, user, stats, appProfile = undefined) {
+  const profileRef = doc(db, 'users', user.uid);
+  return runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(profileRef);
+    const current = snapshot.exists() ? snapshot.data() : {};
+    const mergedStats = mergeCloudStats(current.stats || normalizedStats(current), stats || {});
+    const mergedProfile = appProfile === undefined
+      ? (current.appProfile || {})
+      : mergeCloudAppProfile(current.appProfile || {}, appProfile || {});
+    transaction.set(profileRef, profilePayload(user, mergedStats, mergedProfile), { merge: true });
+    return { stats: mergedStats, profile: mergedProfile };
+  });
 }
 
 function makeCloudSnapshot(profileSnapshot, attemptsSnapshot, questionsSnapshot) {
@@ -228,10 +294,7 @@ async function commitInChunks(db, operations) {
 export async function saveUserStoreToCloud(user, store) {
   const { db } = await getFirebaseClient();
   if (!user?.uid || user.isAnonymous) throw new Error('A Google account is required for cloud sync.');
-  const operations = [{
-    ref: doc(db, 'users', user.uid),
-    data: profilePayload(user, store.stats, store.profile),
-  }];
+  const operations = [];
 
   for (const attempt of store.history || []) {
     if (!attempt?.id) continue;
@@ -248,42 +311,75 @@ export async function saveUserStoreToCloud(user, store) {
     });
   }
   await commitInChunks(db, operations);
-  return { synced: true, operationCount: operations.length };
+  await mergeAndWriteUserProfile(db, user, store.stats, store.profile || {});
+  return { synced: true, operationCount: operations.length + 1 };
 }
 
-export async function syncAttemptToFirestore(user, attempt, stats) {
+export async function syncAttemptToFirestore(user, attempt, stats, appProfile = undefined) {
   if (!user?.uid || user.isAnonymous) return { synced: false, reason: 'no-google-user' };
   const { db } = await getFirebaseClient();
-  const batch = writeBatch(db);
-  batch.set(doc(db, 'users', user.uid, 'attempts', safeDocId(attempt.id)), {
-    ...cleanForFirestore({ ...attempt, id: attempt.id }),
-    syncedAt: serverTimestamp(),
-  }, { merge: true });
-  batch.set(doc(db, 'users', user.uid), profilePayload(user, stats), { merge: true });
-  await batch.commit();
+  const profileRef = doc(db, 'users', user.uid);
+  const attemptRef = doc(db, 'users', user.uid, 'attempts', safeDocId(attempt.id));
+  await runTransaction(db, async (transaction) => {
+    const [profileSnapshot, attemptSnapshot] = await Promise.all([transaction.get(profileRef), transaction.get(attemptRef)]);
+    const currentProfile = profileSnapshot.exists() ? profileSnapshot.data() : {};
+    const previousAttempt = attemptSnapshot.exists() ? attemptSnapshot.data() : null;
+    const previousFinalized = Boolean(previousAttempt?.confidenceStatus || previousAttempt?.confidenceAppliedAt);
+    const incomingFinalized = Boolean(attempt?.confidenceStatus || attempt?.confidenceAppliedAt);
+    const finalAttempt = previousFinalized && !incomingFinalized
+      ? previousAttempt
+      : previousFinalized && incomingFinalized && numericTimestamp(previousAttempt?.confidenceAppliedAt) > numericTimestamp(attempt?.confidenceAppliedAt)
+        ? previousAttempt : attempt;
+    const mergedStats = mergeCloudStats(currentProfile.stats || normalizedStats(currentProfile), stats || {});
+    const existingStats = normalizedStats(currentProfile);
+    const xpDelta = Number(finalAttempt?.xpEarned || 0) - Number(previousAttempt?.xpEarned || 0);
+    const correctIncrement = !previousAttempt && finalAttempt?.isCorrect ? 1 : 0;
+    mergedStats.xp = Math.max(mergedStats.xp, existingStats.xp + xpDelta, Number(stats?.xp || 0));
+    mergedStats.totalCorrect = Math.max(mergedStats.totalCorrect, existingStats.totalCorrect + correctIncrement, Number(stats?.totalCorrect || 0));
+    if (finalAttempt?.isCorrect && finalAttempt.dateKey) {
+      mergedStats.activeDays = [...new Set([...mergedStats.activeDays, finalAttempt.dateKey])].sort();
+      if (finalAttempt.isPotd) {
+        mergedStats.potdCompletedDates = [...new Set([...mergedStats.potdCompletedDates, finalAttempt.dateKey])].sort();
+        const ids = new Set(mergedStats.potdCompletedQuestionIdsByDate?.[finalAttempt.dateKey] || []);
+        ids.add(String(finalAttempt.questionId));
+        mergedStats.potdCompletedQuestionIdsByDate = { ...(mergedStats.potdCompletedQuestionIdsByDate || {}), [finalAttempt.dateKey]: [...ids].sort() };
+      }
+    }
+    const appProfileToSave = appProfile === undefined
+      ? (currentProfile.appProfile || {})
+      : mergeCloudAppProfile(currentProfile.appProfile || {}, appProfile || {});
+    transaction.set(attemptRef, { ...cleanForFirestore({ ...finalAttempt, id: finalAttempt.id }), syncedAt: serverTimestamp() }, { merge: true });
+    transaction.set(profileRef, profilePayload(user, mergedStats, appProfileToSave), { merge: true });
+  });
   return { synced: true };
 }
 
-export async function syncQuestionsToFirestore(user, questions, stats) {
+export async function syncQuestionsToFirestore(user, questions, stats, appProfile = undefined) {
   if (!user?.uid || user.isAnonymous || !questions?.length) return { synced: false, reason: 'no-google-user-or-questions' };
   const { db } = await getFirebaseClient();
   const operations = questions.map((question) => ({
     ref: doc(db, 'users', user.uid, 'customQuestions', safeDocId(question.id)),
     data: { ...cleanForFirestore(question), syncedAt: serverTimestamp() },
   }));
-  if (stats) operations.push({ ref: doc(db, 'users', user.uid), data: profilePayload(user, stats) });
   await commitInChunks(db, operations);
-  return { synced: true, operationCount: operations.length };
+  if (stats) await mergeAndWriteUserProfile(db, user, stats, appProfile);
+  return { synced: true, operationCount: operations.length + (stats ? 1 : 0) };
 }
 
-
-/** Update only the current user's recent-question trail; do not rewrite their full history per selection. */
+/** Merge recent-question trail events transactionally so an older offline device cannot erase newer views. */
 export async function syncRecentQuestionTrailToFirestore(user, trail) {
   if (!user?.uid || user.isAnonymous) return { synced: false, reason: 'no-google-user' };
   const { db } = await getFirebaseClient();
-  await updateDoc(doc(db, 'users', user.uid), {
-    'stats.recentQuestionTrail': cleanForFirestore(Array.isArray(trail) ? trail.slice(-40) : []),
-    updatedAt: serverTimestamp(),
+  const profileRef = doc(db, 'users', user.uid);
+  await runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(profileRef);
+    if (!snapshot.exists()) throw new Error('Cloud profile is missing; retry a full profile sync first.');
+    const current = snapshot.data();
+    const mergedTrail = mergeRecentTrails(current.stats?.recentQuestionTrail || [], Array.isArray(trail) ? trail : []);
+    transaction.update(profileRef, {
+      'stats.recentQuestionTrail': cleanForFirestore(mergedTrail),
+      updatedAt: serverTimestamp(),
+    });
   });
   return { synced: true };
 }

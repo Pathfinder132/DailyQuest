@@ -2759,75 +2759,391 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #15b8d2; outli
   .app-header-controls > .player-level-chip svg { width: 11px; height: 11px; }
 }
 
-/* Full-screen onboarding layout: use available monitor width rather than a centered max-width island. */
-@media (min-width: 901px) {
+/* POTD urgency: visible without hijacking the full viewport or forcing outer scrolling. */
+.potd-urgency-alert {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px 11px;
+  width: 100%;
+  margin: 0 0 clamp(8px, 1vh, 13px);
+  padding: clamp(8px, .85vh, 12px) clamp(11px, 1.1vw, 18px);
+  color: #5a1724;
+  background: linear-gradient(100deg, #ffe0e3, #fff0a0 78%, #ffe4ae);
+  border: 2px solid #371e42;
+  border-radius: 13px;
+  box-shadow: 3px 4px 0 #371e42;
+  font-size: clamp(12px, .78vw, 15px);
+  line-height: 1.35;
+  animation: streakDangerPulse 2.1s ease-in-out infinite;
+}
+.potd-urgency-icon { font-size: clamp(17px, 1.25vw, 23px); }
+.potd-urgency-alert strong { font-size: 1.02em; font-weight: 950; letter-spacing: .035em; }
+.potd-urgency-alert > span:not(.potd-urgency-icon) { font-weight: 750; }
+.potd-urgency-alert small { margin-left: auto; color: #684a11; font-size: .86em; font-weight: 800; }
+@keyframes streakDangerPulse {
+  0%, 100% { box-shadow: 3px 4px 0 #371e42, 0 0 0 0 rgba(240, 74, 91, 0); }
+  50% { box-shadow: 3px 4px 0 #371e42, 0 0 0 4px rgba(240, 74, 91, .19); }
+}
+
+/* Structured explanation fields stay in the existing solution card and reuse its palette. */
+.solution-copy { display: block; }
+.solution-renderer { display: grid; gap: 9px; }
+.solution-main-text { white-space: pre-line; }
+.solution-structured-block {
+  padding: 9px 11px;
+  border: 1px solid #ddd2f6;
+  border-left: 4px solid #6b35f4;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .82);
+  white-space: pre-line;
+}
+.solution-structured-why { border-left-color: #2377d4; background: #f0f7ff; }
+.solution-structured-trap { border-left-color: #d39b1c; background: #fff8df; }
+.solution-structured-analogy { border-left-color: #1c9d71; background: #edfff7; }
+.solution-metadata { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+.solution-meta-topic, .solution-meta-tag {
+  display: inline-flex; align-items: center; max-width: 100%;
+  padding: 4px 8px; border: 1px solid #d5c8f3; border-radius: 999px;
+  color: #4a347d; background: #f1ebff; font-size: 10px; font-weight: 850; letter-spacing: .035em;
+}
+.solution-meta-topic { color: #125b4a; background: #e7fff4; border-color: #a4e8cc; }
+
+.streak-freeze-status {
+  display: flex; align-items: center; gap: 9px;
+  margin-top: 12px; padding: 10px 11px;
+  border: 1px solid #d7e4f5; border-radius: 11px;
+  color: #3c4d69; background: #f5f9ff;
+}
+.streak-freeze-status > span:first-child { font-size: 21px; }
+.streak-freeze-status > span:nth-child(2) { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 2px; }
+.streak-freeze-status strong { font-size: 12px; font-weight: 900; }
+.streak-freeze-status small { font-size: 10px; line-height: 1.4; }
+.streak-freeze-status > b { flex: 0 0 auto; font-size: 9px; letter-spacing: .06em; }
+.streak-freeze-available { border-color: #62cdb0; background: #eafff6; color: #12654c; }
+.week-day-protected { border-color: #94b8ef; background: #eef5ff; color: #2454a2; }
+
+@media (max-width: 760px) {
+  .potd-urgency-alert { gap: 6px 8px; border-radius: 10px; padding: 9px 10px; }
+  .potd-urgency-alert small { width: 100%; margin-left: 28px; }
+  .solution-structured-block { padding: 8px 9px; }
+  .solution-meta-topic, .solution-meta-tag { font-size: 9px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .potd-urgency-alert { animation: none; }
+}
+
+/* Home utility cards: compact daily progress + fully clickable POTD action. */
+.welcome-row { align-items: center; gap: clamp(14px, 2vw, 30px); }
+.welcome-copy { flex: 1 1 auto; min-width: 0; }
+.welcome-utility-cards { display: flex; flex: 0 0 auto; align-items: stretch; gap: 10px; min-width: 0; }
+.today-solved-card {
+  display: flex; flex: 0 0 96px; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 78px; padding: 9px 8px; border: 1.5px solid var(--ink); border-radius: 14px;
+  color: var(--ink); background: linear-gradient(145deg, #e8e0ff, #ffffff 68%);
+  box-shadow: 3px 4px 0 var(--ink); text-align: center;
+}
+.today-solved-label { color: #6b35f4; font: 900 9px 'DM Mono', monospace; letter-spacing: .15em; }
+.today-solved-card strong { margin: 1px 0; font-size: clamp(25px, 2vw, 34px); line-height: .98; font-weight: 950; letter-spacing: -.06em; }
+.today-solved-card small { color: #655a78; font: 800 7px 'DM Mono', monospace; letter-spacing: .06em; white-space: nowrap; }
+.potd-quick-widget {
+  display: flex; flex: 0 1 clamp(245px, 24vw, 350px); align-items: center; gap: 10px; min-width: 0; min-height: 78px;
+  padding: 12px 14px; border: 1.5px solid var(--ink); border-radius: 14px; color: #31223a;
+  box-shadow: 3px 4px 0 var(--ink); text-align: left; cursor: pointer;
+  transition: transform .16s ease, box-shadow .16s ease, filter .16s ease;
+}
+.potd-quick-widget:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 3px 6px 0 var(--ink); filter: saturate(1.08); }
+.potd-quick-widget:active:not(:disabled) { transform: translateY(1px); box-shadow: 2px 2px 0 var(--ink); }
+.potd-quick-widget:focus-visible { outline: 3px solid #12a9c2; outline-offset: 4px; }
+.potd-quick-widget:disabled { opacity: .72; cursor: not-allowed; }
+.potd-quick-widget-pending { background: linear-gradient(115deg, #fff17a, #ffc65e 95%); }
+.potd-quick-widget-solved { background: linear-gradient(115deg, #c7ffc0, #8ce3b0 95%); }
+.potd-quick-icon { display: grid; place-items: center; flex: 0 0 38px; width: 38px; height: 38px; border: 1.3px solid rgba(33,25,54,.45); border-radius: 11px; background: rgba(255,255,255,.65); font-size: 22px; }
+.potd-quick-copy { display: flex; flex: 1 1 auto; flex-direction: column; gap: 4px; min-width: 0; }
+.potd-quick-copy strong { color: #30243d; font-size: clamp(11px, .9vw, 14px); line-height: 1.25; font-weight: 950; }
+.potd-quick-copy small { color: #51445f; font-size: clamp(9px, .68vw, 11px); line-height: 1.35; font-weight: 700; }
+.potd-quick-arrow { flex: 0 0 auto; color: #493365; }
+
+/* The pet bubble sits above the avatar, with its tail pointing toward the companion. */
+.pet-card .pet-speech,
+.auth-pet-card .pet-speech,
+.profile-setup-hero-pet .pet-speech {
+  position: relative; align-self: center; flex: 0 0 auto; width: 100%; max-width: 100%;
+  margin: 0 0 4px; transform: none; overflow: visible; z-index: 3;
+}
+.pet-card .pet-speech .speech-tail,
+.auth-pet-card .pet-speech .speech-tail,
+.profile-setup-hero-pet .pet-speech .speech-tail {
+  left: 50%; bottom: -7px; transform: translateX(-50%) rotate(45deg);
+  z-index: 1; pointer-events: none;
+}
+.companion-panel .pet-card { gap: 7px; }
+.companion-panel .pet-speech { transform: none; }
+
+@media (max-width: 900px) {
+  .home-page .welcome-row { display: flex; flex-direction: column; align-items: stretch; gap: 12px; }
+  .home-page .welcome-copy { width: 100%; }
+  .home-page .welcome-utility-cards { display: grid; grid-template-columns: minmax(82px, .62fr) minmax(0, 1.8fr); width: 100%; gap: 9px; }
+  .home-page .today-solved-card { min-height: 72px; width: 100%; padding: 7px 5px; }
+  .home-page .potd-quick-widget { width: 100%; min-width: 0; min-height: 72px; padding: 10px 11px; }
+  .home-page .potd-quick-copy strong { font-size: clamp(11px, 2.7vw, 14px); }
+  .home-page .potd-quick-copy small { font-size: 10px; }
+  .companion-panel .pet-card { gap: 9px; }
+  .companion-panel .pet-speech { margin-bottom: 3px; }
+}
+@media (max-width: 480px) {
+  .home-page .welcome-utility-cards { grid-template-columns: 82px minmax(0, 1fr); gap: 7px; }
+  .home-page .today-solved-card { min-height: 66px; }
+  .home-page .today-solved-card strong { font-size: 25px; }
+  .home-page .today-solved-card small { font-size: 6px; }
+  .home-page .potd-quick-widget { min-height: 66px; gap: 7px; padding: 8px; }
+  .home-page .potd-quick-icon { width: 31px; height: 31px; flex-basis: 31px; }
+  .home-page .potd-quick-copy strong { font-size: 10px; }
+  .home-page .potd-quick-copy small { font-size: 8px; }
+  .home-page .potd-quick-arrow { width: 16px; }
+}
+
+/* Final mobile restoration: a late desktop onboarding grid rule had been overriding
+   the original single-column mobile rule, squeezing the hero into a narrow track. */
+@media (max-width: 900px) {
+  .auth-shell .auth-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    align-items: stretch;
+    width: min(560px, 100%);
+    max-width: 560px;
+    height: auto;
+    min-height: 0;
+    margin: 0 auto;
+    padding: 22px 0 26px;
+    gap: 20px;
+  }
+
+  .auth-shell .auth-hero,
+  .auth-shell .auth-card {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .auth-shell .auth-hero h1 {
+    max-width: 100%;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+
+  .auth-shell .auth-pet-card {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .auth-shell .auth-loading {
+    width: 100%;
+  }
+}
+
+@media (max-width: 600px) {
   .auth-shell {
+    width: 100%;
+    min-height: 100svh;
+    height: auto;
+    overflow-x: clip;
+    overflow-y: auto;
+  }
+
+  .auth-shell .auth-layout {
+    padding-top: 17px;
+    gap: 16px;
+  }
+
+  .auth-shell .auth-hero h1 {
+    max-width: 100%;
+    font-size: clamp(35px, 10.5vw, 48px);
+    line-height: .99;
+  }
+
+  .auth-shell .auth-card {
+    align-self: stretch;
+  }
+}
+
+/* Give the compact Today/POTD row a small right-side safety inset so its
+   border and offset shadow never get clipped by a narrow viewport. */
+@media (max-width: 900px) {
+  .home-page .welcome-utility-cards {
+    width: calc(100% - 8px);
+    max-width: calc(100% - 8px);
+    margin-right: 8px;
     box-sizing: border-box;
-    min-height: 100dvh;
-    padding: clamp(18px, 2.2vh, 30px) clamp(24px, 3.1vw, 64px) clamp(14px, 1.8vh, 24px);
+  }
+
+  .home-page .potd-quick-widget {
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+    box-sizing: border-box;
+  }
+}
+
+/* DailyQuest note-pointer: warm paper, purple ink, and a confident dark outline.
+   Applied only to mouse/trackpad interactions; touch and text-entry cursors stay native. */
+@media (hover: hover) and (pointer: fine) {
+  button:not(:disabled),
+  a[href],
+  [role="button"],
+  summary,
+  label[for],
+  select,
+  input[type="checkbox"],
+  input[type="radio"] {
+    cursor: url('/note-pointer.svg') 3 2, pointer;
+  }
+
+  button:disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+}
+
+/* Mobile welcome companion: remove the side-copy column and make the pet the hero.
+   Desktop retains the original two-column companion card unchanged. */
+@media (max-width: 600px) {
+  .auth-shell .auth-pet-card {
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
-  }
-  .auth-top-mark, .auth-footer { width: 100%; max-width: none; }
-  .auth-layout {
-    grid-template-columns: minmax(0, 1fr) minmax(420px, 0.78fr);
-    gap: clamp(30px, 4vw, 80px);
-    align-items: stretch;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
     width: 100%;
-    max-width: none;
-    flex: 1;
     min-height: 0;
-    padding: clamp(18px, 3vh, 42px) 0;
+    height: auto;
+    margin-top: 14px;
+    padding: 13px 12px 14px;
+    overflow: visible;
   }
-  .auth-hero { display:flex; flex-direction:column; justify-content:space-between; min-height:0; }
-  .auth-hero h1 { font-size: clamp(48px, 4.4vw, 82px); }
-  .auth-hero > p { max-width: 780px; font-size: clamp(17px, 1.15vw, 22px); }
-  .auth-pet-card { width:100%; max-width:none; flex:1; min-height:220px; margin-top:clamp(20px, 3vh, 40px); grid-template-columns:minmax(0,1fr) minmax(200px, .58fr); padding:clamp(18px, 2vw, 34px); }
-  .auth-pet-card .pet-avatar-wrap { height:clamp(120px, 19vh, 210px); width:clamp(160px, 17vw, 250px); }
-  .auth-pet-card .pet-pixels { transform:scale(clamp(1.15, 1.6vw, 1.55)); }
-  .auth-pet-copy strong { font-size:clamp(15px, 1.1vw, 20px); }
-  .auth-pet-copy small { font-size:clamp(12px, .85vw, 16px); }
-  .auth-card { display:flex; flex-direction:column; justify-content:center; width:100%; height:100%; box-sizing:border-box; padding:clamp(30px, 3vw, 54px); }
-  .auth-card h2 { font-size:clamp(30px, 2.3vw, 44px); }
-  .auth-card-description, .auth-loading p { font-size:clamp(15px, 1vw, 19px); }
-  .google-signin-button { min-height:clamp(60px, 7vh, 76px); font-size:clamp(15px, 1vw, 18px); }
 
-  .profile-setup-shell {
-    grid-template-rows: auto minmax(0, 1fr);
-    width:100%; height:100dvh; min-height:0;
-    padding:clamp(14px, 2vh, 28px) clamp(24px, 3vw, 64px) clamp(14px, 2vh, 26px);
-    gap:clamp(10px, 1.8vh, 24px);
+  .auth-shell .auth-pet-copy {
+    display: none;
   }
-  .profile-setup-brand { width:100%; max-width:none; min-height:44px; }
-  .profile-setup-layout {
-    grid-template-columns:minmax(0, 5fr) minmax(0, 7fr);
-    grid-template-rows:minmax(0, 1fr);
-    align-items:stretch; gap:clamp(24px, 3vw, 64px);
-    width:100%; max-width:none; height:100%; min-height:0;
-    padding:clamp(8px, 1.5vh, 22px) 0 4px;
+
+  .auth-shell .auth-pet-card .pet-card {
+    display: flex;
+    grid-column: auto;
+    grid-row: auto;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    width: 100%;
+    max-width: 340px;
+    min-width: 0;
+    margin: 0 auto;
   }
-  .profile-setup-hero { justify-content:space-between; padding:clamp(8px, 1vh, 18px) 0; }
-  .profile-setup-hero h2 { font-size:clamp(44px, 4.4vw, 82px); margin:clamp(12px, 2vh, 26px) 0; }
-  .profile-setup-hero > p { max-width:unset; font-size:clamp(16px, 1.2vw, 22px); line-height:1.5; }
-  .profile-setup-hero-pet { display:flex; flex:1; flex-direction:column; justify-content:space-between; min-height:0; margin-top:clamp(18px, 3vh, 42px); padding:clamp(20px, 2vw, 38px); }
-  .profile-setup-hero-pet .pet-card { max-width:unset; flex:1; display:flex; flex-direction:column; justify-content:center; }
-  .profile-setup-hero-pet .pet-avatar-wrap { height:clamp(140px, 22vh, 250px); width:clamp(200px, 21vw, 320px); }
-  .profile-setup-hero-pet .pet-pixels { transform:scale(clamp(1.25, 1.8vw, 1.8)); }
-  .profile-setup-hero-note { font-size:clamp(12px, .9vw, 16px); padding-top:clamp(12px, 1.5vh, 20px); }
-  .profile-setup-card { display:flex; flex-direction:column; justify-content:space-between; height:100%; max-height:100%; min-height:0; box-sizing:border-box; padding:clamp(24px, 2.6vw, 48px); overflow:auto; }
-  .profile-setup-card h1 { font-size:clamp(30px, 2.5vw, 46px); }
-  .profile-setup-description { font-size:clamp(15px, 1.1vw, 20px); line-height:1.5; }
-  .profile-setup-eyebrow { font-size:clamp(10px, .75vw, 13px); }
-  .profile-setup-card-step-0 .pet-choice-grid { flex:1; align-items:stretch; gap:clamp(10px, 1vw, 18px); }
-  .profile-setup-card-step-0 .pet-choice-card { justify-content:space-between; padding:clamp(14px, 1.5vw, 26px); }
-  .profile-setup-card-step-0 .pet-choice-avatar, .profile-setup-card-step-0 .pet-choice-placeholder { height:clamp(110px, 18vh, 200px); }
-  .profile-setup-card-step-0 .pet-choice-avatar .pet-avatar-wrap { height:clamp(76px, 11vh, 130px); width:clamp(110px, 11vw, 180px); }
-  .profile-setup-card-step-0 .pet-choice-avatar .pet-pixels { transform:scale(clamp(.9, 1.15vw, 1.25)); }
-  .profile-setup-card-step-0 .pet-choice-copy strong { font-size:clamp(14px, 1vw, 19px); }
-  .profile-setup-card-step-0 .pet-choice-copy span { font-size:clamp(12px, .85vw, 16px); }
-  .profile-setup-card-step-0 .pet-choice-copy small { font-size:clamp(10px, .75vw, 14px); }
-  .profile-setup-card-step-2 .interest-chip-grid { grid-template-columns:repeat(4, minmax(0, 1fr)); gap:clamp(8px, .8vw, 14px); }
-  .profile-setup-card-step-2 .interest-chip { min-height:clamp(48px, 6vh, 68px); padding:clamp(10px, 1.1vw, 20px); font-size:clamp(14px, 1vw, 18px); font-weight:900; }
-  .profile-setup-card-step-2 .daily-goal-option { min-height:clamp(65px, 8vh, 88px); }
+
+  .auth-shell .auth-pet-card .pet-speech {
+    align-self: center;
+    width: min(100%, 320px);
+    min-height: 46px;
+    margin: 0 auto 5px;
+    padding: 9px 12px;
+    border-radius: 13px;
+  }
+
+  .auth-shell .auth-pet-card .pet-speech p {
+    font-size: 11px;
+    line-height: 1.35;
+    text-align: left;
+  }
+
+  .auth-shell .auth-pet-card .pet-avatar-wrap {
+    align-self: center;
+    width: 154px;
+    height: 112px;
+    margin: 1px auto 0;
+  }
+
+  .auth-shell .auth-pet-card .pet-pixels {
+    transform: scale(1.06);
+    transform-origin: center;
+  }
+
+  .auth-shell .auth-pet-card .pet-caption {
+    align-self: center;
+    margin: 0;
+    font-size: 8px;
+    text-align: center;
+  }
+
+  .auth-shell .auth-cloud-sticker {
+    display: none;
+  }
+
+  .auth-shell .auth-benefits {
+    gap: 7px 11px;
+    margin-top: 10px;
+    font-size: 9px;
+  }
+}
+
+/* DailyQuest note-taking cursor across the entire site, not only controls.
+   Keep text-entry cursors and disabled-state feedback native. This only applies
+   to mouse/trackpad devices; touch devices keep their normal interaction model. */
+@media (hover: hover) and (pointer: fine) {
+  html,
+  body,
+  body *,
+  body *::before,
+  body *::after {
+    cursor: url('/note-pointer.svg') 3 2, auto !important;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  textarea,
+  [contenteditable="true"],
+  [contenteditable=""] {
+    cursor: text !important;
+  }
+
+  button:disabled,
+  [aria-disabled="true"],
+  [disabled] {
+    cursor: not-allowed !important;
+  }
+}
+
+/* Keep the Home utility row above nearby cards while the POTD action is hovered.
+   The parent row also needs a stacking level: a child's z-index cannot escape
+   the stacking order of its parent. This prevents the hover lift/shadow from
+   painting underneath adjacent content. */
+.home-page .welcome-row {
+  position: relative;
+  z-index: 60;
+  overflow: visible;
+}
+
+.home-page .welcome-utility-cards {
+  position: relative;
+  z-index: 61;
+  overflow: visible;
+}
+
+.home-page .today-solved-card,
+.home-page .potd-quick-widget {
+  position: relative;
+  z-index: 1;
+}
+
+.home-page .potd-quick-widget:hover:not(:disabled),
+.home-page .potd-quick-widget:focus-visible,
+.home-page .potd-quick-widget:active:not(:disabled) {
+  z-index: 9999;
+}
+
+@media (max-width: 900px) {
+  .home-page .welcome-row,
+  .home-page .welcome-utility-cards {
+    overflow: visible;
+  }
 }

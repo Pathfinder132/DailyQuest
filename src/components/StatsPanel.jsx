@@ -21,6 +21,8 @@ export default function StatsPanel({ view = 'sidebar', store, streak, level, pet
   const today = localDateKey();
   const todayAttempts = store.history.filter((attempt) => attempt.dateKey === today).length;
   const active = new Set(store.stats.activeDays || []);
+  const protectedDates = new Set(store.stats.streakFreeze?.protectedDates || []);
+  const streakFreezeAvailable = Boolean(store.stats.streakFreeze?.available);
   const days = [];
   for (let i = 6; i >= 0; i -= 1) {
     const date = new Date(); date.setDate(date.getDate() - i);
@@ -41,9 +43,14 @@ export default function StatsPanel({ view = 'sidebar', store, streak, level, pet
         <div className="side-card-title"><div className="streak-flame"><Flame size={21} fill="currentColor" /></div><div><p className="eyebrow">YOUR LAST 7 DAYS</p><h3>Weekly activity</h3></div></div>
         <div className="streak-number"><strong>{streak}</strong><span>days</span><div className="streak-sparks">✦ ✦ ✦</div></div>
         <div className="week-strip" aria-label="Activity in the last seven days">
-          {days.map((day) => <div className={`week-day ${active.has(day.key) ? 'week-day-active' : ''} ${day.key === today ? 'week-day-today' : ''}`} key={day.key}><span>{day.label}</span><i>{active.has(day.key) ? '✦' : '·'}</i></div>)}
+          {days.map((day) => <div className={`week-day ${active.has(day.key) ? 'week-day-active' : ''} ${protectedDates.has(day.key) && !active.has(day.key) ? 'week-day-protected' : ''} ${day.key === today ? 'week-day-today' : ''}`} key={day.key}><span>{day.label}</span><i>{active.has(day.key) ? '✦' : protectedDates.has(day.key) ? '🧊' : '·'}</i></div>)}
         </div>
         <p className="muted-note">Solve correctly on consecutive days to build your streak.</p>
+        <div className={`streak-freeze-status ${streakFreezeAvailable ? 'streak-freeze-available' : ''}`}>
+          <span aria-hidden="true">🧊</span>
+          <span><strong>{streakFreezeAvailable ? 'Streak Freeze ready' : 'Streak Freeze'}</strong><small>{streakFreezeAvailable ? 'One missed day can be protected automatically.' : 'Earn one by maintaining a 7-day consistency milestone.'}</small></span>
+          <b>{streakFreezeAvailable ? 'READY' : `${Math.max(0, 7 - (streak % 7)) || 7} DAYS`}</b>
+        </div>
       </section>
 
       <section className="metrics-grid">

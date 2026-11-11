@@ -132,6 +132,16 @@ export function getQuestionBankTrack(question) {
   return 'core';
 }
 
+/** Return every available question in stable category/topic/ID order without mutating the source bank. */
+export function prepareQuestionBankExport(questions = []) {
+  return [...(Array.isArray(questions) ? questions : [])].sort((left, right) => {
+    const compare = (a, b) => String(a ?? '').localeCompare(String(b ?? ''), undefined, { sensitivity: 'base', numeric: true });
+    return compare(left?.category || 'Uncategorized', right?.category || 'Uncategorized')
+      || compare(left?.topic || '', right?.topic || '')
+      || compare(left?.id || '', right?.id || '');
+  });
+}
+
 export function normalizeImportedQuestion(input, index = 0) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     throw new Error(`Question ${index + 1} must be an object.`);
@@ -185,16 +195,42 @@ export function normalizeImportedQuestion(input, index = 0) {
     correctAnswer = answerOption.id;
   }
 
+  const explanationObject = input.explanation && typeof input.explanation === 'object' && !Array.isArray(input.explanation)
+    ? input.explanation : {};
+  const suppliedExplanationParts = [
+    input.solution,
+    typeof input.explanation === 'string' ? input.explanation : undefined,
+    explanationObject.summary,
+    explanationObject.text,
+    explanationObject.solution,
+  ];
+  const structuredExplanationKeys = [
+    'whyItWorks', 'why_it_works', 'commonTrap', 'coreTrap', 'common_trap',
+    'takeaway', 'analogy', 'realWorldAnalogy', 'real_world_analogy',
+  ];
+  const hasStructuredExplanation = structuredExplanationKeys.some((key) =>
+    [input[key], explanationObject[key]].some((value) => typeof value === 'string' && value.trim()),
+  );
+  const rawSolution = suppliedExplanationParts.find((part) => typeof part === 'string' && part.trim())
+    ?? (hasStructuredExplanation ? '' : 'No explanation provided yet.');
+  const rawTags = input.tags ?? explanationObject.tags;
+  const normalizedTags = Array.isArray(rawTags)
+    ? rawTags.map((tag) => String(tag).trim()).filter(Boolean)
+    : typeof rawTags === 'string' ? rawTags.split(',').map((tag) => tag.trim()).filter(Boolean) : [];
   const normalized = {
     id, category, question, options, correctAnswer,
     difficulty: normalizeDifficulty(input.difficulty),
-    solution: String(input.solution ?? input.explanation ?? 'No explanation provided yet.'),
-    takeaway: String(input.takeaway ?? ''),
-    topic: String(input.topic ?? '').trim() || undefined,
-    subCategory: String(input.subCategory ?? input.subcategory ?? '').trim() || undefined,
+    solution: String(rawSolution),
+    takeaway: String(input.takeaway ?? explanationObject.takeaway ?? ''),
+    topic: String(input.topic ?? explanationObject.topic ?? category).trim() || category,
+    subCategory: String(input.subCategory ?? input.subcategory ?? explanationObject.subCategory ?? '').trim() || undefined,
     questionType: String(input.questionType ?? input.type ?? '').trim() || undefined,
     bankType: String(input.bankType ?? input.track ?? '').trim() || undefined,
-    tags: Array.isArray(input.tags) ? input.tags.map((tag) => String(tag).trim()).filter(Boolean) : undefined,
+    tags: normalizedTags.length ? [...new Set(normalizedTags)] : undefined,
+    whyItWorks: String(input.whyItWorks ?? input.why_it_works ?? explanationObject.whyItWorks ?? explanationObject.why_it_works ?? ''),
+    commonTrap: String(input.commonTrap ?? input.coreTrap ?? input.common_trap ?? explanationObject.commonTrap ?? explanationObject.coreTrap ?? explanationObject.common_trap ?? ''),
+    analogy: String(input.analogy ?? input.realWorldAnalogy ?? input.real_world_analogy ?? explanationObject.analogy ?? explanationObject.realWorldAnalogy ?? explanationObject.real_world_analogy ?? ''),
+    ...(input.explanation && typeof input.explanation === 'object' && !Array.isArray(input.explanation) ? { explanation: { ...input.explanation } } : {}),
     code: typeof input.code === 'string' ? input.code : undefined,
     source: 'imported',
   };
@@ -220,6 +256,9 @@ function hasSameQuestionContent(existing, incoming) {
       existing.correctAnswer !== incoming.correctAnswer || existing.difficulty !== incoming.difficulty ||
       existing.solution !== incoming.solution || (existing.takeaway ?? '') !== (incoming.takeaway ?? '') ||
       (existing.topic ?? '') !== (incoming.topic ?? '') ||
+      (existing.whyItWorks ?? '') !== (incoming.whyItWorks ?? '') ||
+      (existing.commonTrap ?? '') !== (incoming.commonTrap ?? '') ||
+      (existing.analogy ?? '') !== (incoming.analogy ?? '') ||
       (existing.subCategory ?? '') !== (incoming.subCategory ?? '') ||
       (existing.questionType ?? '') !== (incoming.questionType ?? '') ||
       (existing.type ?? '') !== (incoming.type ?? '') ||

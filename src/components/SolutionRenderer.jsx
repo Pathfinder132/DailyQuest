@@ -9,11 +9,12 @@ const COLOR_CLASSES = {
 };
 
 /**
- * Parses red(text), red(*bold text*), blue(...), green(...), gold(...), and code(...).
- * It produces React nodes—not HTML strings—so explanation text cannot inject markup.
+ * Parses the safe explanation mini-language into React elements.
+ * Supported tokens: red(...), blue(...), green(...), gold(...), code(...).
+ * Use *...* inside a token to emphasize its contents.
  */
 export function parseSolution(rawText = '') {
-  const text = String(rawText);
+  const text = String(rawText ?? '');
   const nodes = [];
   let plainStart = 0;
   let cursor = 0;
@@ -58,6 +59,67 @@ export function parseSolution(rawText = '') {
   });
 }
 
-export default function SolutionRenderer({ text }) {
-  return <>{parseSolution(text)}</>;
+function explanationObject(question, text) {
+  if (text && typeof text === 'object' && !Array.isArray(text)) return text;
+  if (question?.explanation && typeof question.explanation === 'object' && !Array.isArray(question.explanation)) return question.explanation;
+  return {};
+}
+
+function sectionValue(question, explanation, keys) {
+  for (const key of keys) {
+    const value = question?.[key] ?? explanation?.[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return '';
+}
+
+function withLabel(labelToken, value, labelPattern) {
+  if (!value) return '';
+  return labelPattern.test(value) ? value : `${labelToken} ${value}`;
+}
+
+export default function SolutionRenderer({ text, question = null }) {
+  const explanation = explanationObject(question, text);
+  const blocks = [
+    {
+      key: 'why',
+      className: 'solution-structured-why',
+      text: withLabel('blue(*Why it works:*)', sectionValue(question, explanation, ['whyItWorks', 'why_it_works']), /blue\(\*?Why it works:/i),
+    },
+    {
+      key: 'trap',
+      className: 'solution-structured-trap',
+      text: withLabel('gold(*The Core Trap:*)', sectionValue(question, explanation, ['commonTrap', 'coreTrap', 'common_trap', 'takeCare']), /gold\(\*?The Core Trap:/i),
+    },
+    {
+      key: 'analogy',
+      className: 'solution-structured-analogy',
+      text: withLabel('green(*Real-world analogy:*)', sectionValue(question, explanation, ['analogy', 'realWorldAnalogy', 'real_world_analogy']), /green\(\*?Real-world analogy:/i),
+    },
+  ].filter((block) => block.text);
+  const suppliedMainText = typeof text === 'string'
+    ? text
+    : explanation.summary || explanation.text || explanation.solution || question?.solution || '';
+  const hasStructuredExplanation = Boolean(
+    blocks.length
+    || question?.takeaway
+    || explanation.takeaway
+    || question?.whyItWorks
+    || question?.commonTrap
+    || question?.analogy,
+  );
+  // Only use the generic prompt when the imported question truly has no explanation.
+  // A structured custom explanation should never be obscured by a placeholder sentence.
+  const mainText = String(suppliedMainText || (hasStructuredExplanation ? '' : 'Review the key concept, then try it again.')).trim();
+
+  return (
+    <div className="solution-renderer">
+      {mainText && <div className="solution-main-text">{parseSolution(mainText)}</div>}
+      {blocks.map((block) => (
+        <div className={`solution-structured-block ${block.className}`} key={block.key}>
+          {parseSolution(block.text)}
+        </div>
+      ))}
+    </div>
+  );
 }

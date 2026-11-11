@@ -1,3 +1,7 @@
+import { normalizeStreakFreeze } from './utils.js';
+import { mergeProfilesByFieldTimestamp } from './profileMerge.js';
+export { mergeProfilesByFieldTimestamp } from './profileMerge.js';
+
 const STORAGE_KEY = 'uttej-engineering-warmup-v1';
 const LEGACY_MIGRATION_KEY = `${STORAGE_KEY}:legacy-migrated-to`;
 
@@ -10,7 +14,9 @@ export const EMPTY_STORE = {
     totalCorrect: 0,
     activeDays: [],
     potdCompletedDates: [],
+    potdCompletedQuestionIdsByDate: {},
     recentQuestionTrail: [],
+    streakFreeze: { available: false, protectedDates: [], lastEarnedMilestone: 0, earnedAt: null, lastUsedDate: null, updatedAt: 0 },
   },
 };
 
@@ -23,7 +29,7 @@ function cloneEmptyStore() {
     history: [],
     customQuestions: [],
     profile: {},
-    stats: { xp: 0, totalCorrect: 0, activeDays: [], potdCompletedDates: [], recentQuestionTrail: [] },
+    stats: { xp: 0, totalCorrect: 0, activeDays: [], potdCompletedDates: [], potdCompletedQuestionIdsByDate: {}, recentQuestionTrail: [], streakFreeze: normalizeStreakFreeze() },
   };
 }
 
@@ -42,9 +48,11 @@ export function readStore(storageKey = STORAGE_KEY) {
         totalCorrect: Number.isFinite(parsed.stats?.totalCorrect) ? parsed.stats.totalCorrect : 0,
         activeDays: Array.isArray(parsed.stats?.activeDays) ? parsed.stats.activeDays : [],
         potdCompletedDates: Array.isArray(parsed.stats?.potdCompletedDates) ? parsed.stats.potdCompletedDates : [],
+        potdCompletedQuestionIdsByDate: parsed.stats?.potdCompletedQuestionIdsByDate && typeof parsed.stats.potdCompletedQuestionIdsByDate === 'object' ? Object.fromEntries(Object.entries(parsed.stats.potdCompletedQuestionIdsByDate).map(([day, ids]) => [day, [...new Set((Array.isArray(ids) ? ids : []).map(String))]])) : {},
         recentQuestionTrail: Array.isArray(parsed.stats?.recentQuestionTrail) ? parsed.stats.recentQuestionTrail.filter((entry) => (typeof entry === 'string' && entry) || (entry && typeof entry.questionId === 'string' && entry.questionId)) : [],
+        streakFreeze: normalizeStreakFreeze(parsed.stats?.streakFreeze),
         ...(parsed.stats?.leveling && Number.isFinite(parsed.stats.leveling.baseXp) && Number.isFinite(parsed.stats.leveling.baseLevel)
-          ? { leveling: { baseXp: parsed.stats.leveling.baseXp, baseLevel: parsed.stats.leveling.baseLevel, version: parsed.stats.leveling.version || 1 } }
+          ? { leveling: { baseXp: parsed.stats.leveling.baseXp, baseLevel: parsed.stats.leveling.baseLevel, version: parsed.stats.leveling.version || 1, ...(parsed.stats.leveling.updatedAt ? { updatedAt: numericTimestamp(parsed.stats.leveling.updatedAt) } : {}) } }
           : {}),
       },
     };
@@ -105,20 +113,21 @@ export function storeHasData(store) {
   );
 }
 
+function numericTimestamp(value) {
+  if (Number.isFinite(value)) return Number(value);
+  if (value && typeof value.toMillis === 'function') return value.toMillis();
+  if (value && Number.isFinite(value.seconds)) return Number(value.seconds) * 1000;
+  return 0;
+}
+
 /** Merge local cache, pre-auth local progress, and cloud state without double-counting attempts. */
 export function mergeStores(...inputStores) {
   const stores = inputStores.filter(Boolean);
   const attemptsById = new Map();
   const questionsById = new Map();
-  const mergedProfile = {};
-  let profileCompleted = false;
+  const mergedProfile = mergeProfilesByFieldTimestamp(...stores.map((store) => store.profile || {}));
 
   for (const store of stores) {
-    const incomingProfile = store.profile && typeof store.profile === 'object' ? store.profile : {};
-    for (const [key, value] of Object.entries(incomingProfile)) {
-      if (value !== undefined) mergedProfile[key] = value;
-    }
-    if (incomingProfile.onboardingCompleted === true) profileCompleted = true;
     for (const attempt of store.history || []) {
       const id = String(attempt?.id || `${attempt?.questionId || 'attempt'}_${attempt?.timestamp || Math.random()}`);
       const incoming = { ...attempt, id };
@@ -154,10 +163,15 @@ export function mergeStores(...inputStores) {
   const correctCount = history.filter((attempt) => attempt.isCorrect).length;
   const activeDays = new Set();
   const potdCompletedDates = new Set();
+  const potdIdsByDate = new Map();
 
   for (const stats of allStats) {
     for (const day of stats.activeDays || []) activeDays.add(day);
     for (const day of stats.potdCompletedDates || []) potdCompletedDates.add(day);
+    for (const [day, ids] of Object.entries(stats.potdCompletedQuestionIdsByDate || {})) {
+      if (!potdIdsByDate.has(day)) potdIdsByDate.set(day, new Set());
+      for (const id of Array.isArray(ids) ? ids : []) potdIdsByDate.get(day).add(String(id));
+    }
   }
   const trailById = new Map();
   let legacyTrailIndex = 0;
@@ -181,26 +195,48 @@ export function mergeStores(...inputStores) {
     .slice(-40);
   for (const attempt of history) {
     if (attempt.isCorrect && attempt.dateKey) activeDays.add(attempt.dateKey);
-    if (attempt.isCorrect && attempt.isPotd && attempt.dateKey) potdCompletedDates.add(attempt.dateKey);
+    if (attempt.isCorrect && attempt.isPotd && attempt.dateKey) {
+      potdCompletedDates.add(attempt.dateKey);
+      if (attempt.questionId) {
+        if (!potdIdsByDate.has(attempt.dateKey)) potdIdsByDate.set(attempt.dateKey, new Set());
+        potdIdsByDate.get(attempt.dateKey).add(String(attempt.questionId));
+      }
+    }
   }
 
   const xp = Math.max(historyXp, ...allStats.map((stats) => Number(stats.xp || 0)), 0);
   const totalCorrect = Math.max(correctCount, ...allStats.map((stats) => Number(stats.totalCorrect || 0)), 0);
-  const leveling = [...allStats].reverse().map((stats) => stats.leveling).find((profile) => (
-    profile && Number.isFinite(profile.baseXp) && profile.baseXp >= 0
-    && Number.isFinite(profile.baseLevel) && profile.baseLevel >= 1
-  ));
+  const levelingCandidates = allStats.map((stats, index) => ({ leveling: stats.leveling, index }))
+    .filter(({ leveling }) => leveling && Number.isFinite(leveling.baseXp) && leveling.baseXp >= 0
+      && Number.isFinite(leveling.baseLevel) && leveling.baseLevel >= 1)
+    .sort((a, b) => numericTimestamp(a.leveling.updatedAt) - numericTimestamp(b.leveling.updatedAt) || a.index - b.index);
+  const leveling = levelingCandidates.length ? levelingCandidates[levelingCandidates.length - 1].leveling : null;
+  const freezeCandidates = allStats.map((stats, index) => ({ freeze: stats.streakFreeze, index }))
+    .filter(({ freeze }) => freeze && typeof freeze === 'object')
+    .sort((a, b) => numericTimestamp(a.freeze.updatedAt) - numericTimestamp(b.freeze.updatedAt) || a.index - b.index);
+  const latestFreeze = freezeCandidates.length ? normalizeStreakFreeze(freezeCandidates[freezeCandidates.length - 1].freeze) : normalizeStreakFreeze();
+  const protectedDates = new Set();
+  for (const stats of allStats) {
+    for (const day of stats.streakFreeze?.protectedDates || []) protectedDates.add(day);
+  }
+  const streakFreeze = {
+    ...latestFreeze,
+    // Protected dates are a monotonic audit trail; an older device cannot remove one.
+    protectedDates: [...protectedDates].sort(),
+  };
   return {
     history,
     customQuestions,
-    profile: { ...mergedProfile, ...(profileCompleted ? { onboardingCompleted: true } : {}) },
+    profile: mergedProfile,
     stats: {
       xp,
       totalCorrect,
       activeDays: [...activeDays].sort(),
       potdCompletedDates: [...potdCompletedDates].sort(),
+      potdCompletedQuestionIdsByDate: Object.fromEntries([...potdIdsByDate.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([day, ids]) => [day, [...ids].sort()])),
       recentQuestionTrail,
-      ...(leveling ? { leveling: { baseXp: leveling.baseXp, baseLevel: leveling.baseLevel, version: leveling.version || 1 } } : {}),
+      streakFreeze,
+      ...(leveling ? { leveling: { baseXp: leveling.baseXp, baseLevel: leveling.baseLevel, version: leveling.version || 1, ...(leveling.updatedAt ? { updatedAt: leveling.updatedAt } : {}) } } : {}),
     },
   };
 }

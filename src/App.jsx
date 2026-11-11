@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
-import { Activity, BarChart3, Cloud, Flame, Home as HomeIcon, Lightbulb, LogOut, RefreshCw, Sparkles, UserRound, Wrench } from 'lucide-react';
+import { Activity, BarChart3, CheckCircle2, ChevronRight, Cloud, Flame, Home as HomeIcon, Lightbulb, LogOut, RefreshCw, Sparkles, UserRound, Wrench } from 'lucide-react';
 import { DEFAULT_QUESTIONS } from './data/questions.js';
-import { STARTER_QUESTIONS, STARTER_TOPICS } from './data/starterBanks.js';
+import { STARTER_QUESTIONS } from './data/starterBanks.js';
 import PixelPet from './components/PixelPet.jsx';
 import QuestionCard from './components/QuestionCard.jsx';
 import StatsPanel from './components/StatsPanel.jsx';
@@ -11,11 +11,12 @@ import JsonImportDrawer from './components/JsonImportDrawer.jsx';
 import AuthScreen from './components/AuthScreen.jsx';
 import ProfileSetup from './components/ProfileSetup.jsx';
 import { DEFAULT_PET_ID } from './data/pets.js';
+import { selectDailyPotd, getPotdHomeSession, isPotdCompletedForToday } from './lib/potd.js';
 import { EMPTY_STORE, exportProgress, getLegacyMigrationUid, getUserStorageKey, mergeStores, readStore, setLegacyMigrationUid, writeStore } from './lib/storage.js';
 import { isHardOrSnippetQuestion, isMathAptitudeQuestion, makeMentalMathQuestion, pickMathAptitudeQuestion } from './lib/questionTools.js';
-import { ACTIVE_RECALL_CHANCE, RECENT_QUESTION_COOLDOWN, applyConfidenceAssessment, calculateStreak, ensureLevelingProfile, evaluateFillInBlankAnswer, getDailyQuestion, getLastDisplayedOptionOrder, getLevelInfo, isFillInBlankQuestion, localDateKey, makeId, pickQuestionWithActiveRecall, calculateQuestionReward, shuffleOptionsForDisplay } from './lib/utils.js';
+import { ACTIVE_RECALL_CHANCE, RECENT_QUESTION_COOLDOWN, applyConfidenceAssessment, calculateStreak, ensureLevelingProfile, evaluateFillInBlankAnswer, normalizeStreakFreeze, reconcileStreakFreezeForMissedDay, grantStreakFreezeForConsistency, getLastDisplayedOptionOrder, getLevelInfo, isFillInBlankQuestion, localDateKey, makeId, pickQuestionWithActiveRecall, calculateQuestionReward, shuffleOptionsForDisplay } from './lib/utils.js';
 import { playUiSound } from './lib/sounds.js';
-import { isFirebaseConfigured, saveUserStoreToCloud, signInWithGoogle, signOutCurrentUser, subscribeToAuthChanges, subscribeToUserCloudStore, syncAttemptToFirestore, syncQuestionsToFirestore, syncRecentQuestionTrailToFirestore, checkUserCloudProfile } from './lib/firebaseSync.js';
+import { isFirebaseConfigured, saveUserStoreToCloud, signInWithGoogle, signOutCurrentUser, subscribeToAuthChanges, subscribeToUserCloudStore, syncAttemptToFirestore, syncQuestionsToFirestore, syncRecentQuestionTrailToFirestore, checkUserCloudProfile, loadUserCloudStore } from './lib/firebaseSync.js';
 
 function popConfetti() {
   confetti({ particleCount: 95, spread: 74, origin: { y: 0.63 }, startVelocity: 34, scalar: 0.9, ticks: 170 });
@@ -40,17 +41,41 @@ function popLevelUpConfetti(events) {
   }
 }
 
-function getTodayAttempt(store, questionId) {
-  const today = localDateKey();
-  return [...store.history].reverse().find((attempt) => attempt.questionId === questionId && attempt.dateKey === today);
+const BUILT_IN_QUESTIONS = [...DEFAULT_QUESTIONS, ...STARTER_QUESTIONS].map((question) => ({
+  ...question,
+  topic: question.topic || question.category,
+  tags: [...new Set([...(Array.isArray(question.tags) ? question.tags : []), question.category, question.difficulty].filter(Boolean))],
+}));
+
+function getProfileDailyQuestion(profile = {}, dateKey = localDateKey()) {
+  return selectDailyPotd(BUILT_IN_QUESTIONS, profile, dateKey);
 }
 
-function getLatestPendingConfidenceAttempt(store) {
-  return [...(store?.history || [])].reverse().find((attempt) => (
-    attempt?.id && attempt?.questionSnapshot?.id && Number.isFinite(attempt.baseXpEarned)
-    && !['explicit', 'shaky'].includes(attempt.confidenceStatus)
-    && !attempt.confidenceAppliedAt
-  )) || null;
+function getHomeQuestionSession(profileStore, dateKey = localDateKey()) {
+  const potd = getProfileDailyQuestion(profileStore?.profile, dateKey);
+  return getPotdHomeSession(profileStore, potd, dateKey);
+}
+
+function stampChangedProfileFields(previousProfile = {}, nextProfile = {}, timestamp = Date.now()) {
+  const fieldUpdatedAt = { ...(previousProfile?.fieldUpdatedAt || {}), ...(nextProfile?.fieldUpdatedAt || {}) };
+  const legacyTimestampValue = (value) => Number.isFinite(value) ? Number(value)
+    : (value && typeof value.toMillis === 'function' ? value.toMillis() : 0);
+  const explicitFields = new Set(
+    Array.isArray(nextProfile?.fieldTimestampedFields) ? nextProfile.fieldTimestampedFields
+      : Array.isArray(previousProfile?.fieldTimestampedFields) ? previousProfile.fieldTimestampedFields
+        : Object.entries(previousProfile?.fieldUpdatedAt || {})
+          .filter(([, value]) => legacyTimestampValue(value) > 0)
+          .map(([key]) => key),
+  );
+  const keys = new Set([...Object.keys(previousProfile || {}), ...Object.keys(nextProfile || {})]);
+  for (const key of keys) {
+    if (['fieldUpdatedAt', 'fieldTimestampedFields', 'updatedAt'].includes(key) || !Object.prototype.hasOwnProperty.call(nextProfile, key)) continue;
+    if (stableSerialize(previousProfile?.[key]) !== stableSerialize(nextProfile[key]) || !fieldUpdatedAt[key]) {
+      fieldUpdatedAt[key] = timestamp;
+      explicitFields.add(key);
+    }
+  }
+  return { ...nextProfile, fieldUpdatedAt, fieldTimestampedFields: [...explicitFields].sort(), updatedAt: timestamp };
 }
 
 function makeAnswerStateFromAttempt(attempt) {
@@ -144,7 +169,10 @@ function safeRuntimeError(value) {
 }
 
 export default function App() {
-  const [store, setStore] = useState(() => ensureLevelingProfile(readStore()));
+  const [store, setStore] = useState(() => {
+    const localStore = ensureLevelingProfile(readStore());
+    return { ...localStore, stats: reconcileStreakFreezeForMissedDay(localStore.stats, new Date()) };
+  });
   const [activePage, setActivePage] = useState(() => pageFromPath(window.location.pathname));
   const [sessionRuntimeErrors, setSessionRuntimeErrors] = useState([]);
   const [authStatus, setAuthStatus] = useState(() => isFirebaseConfigured() ? 'checking' : 'unconfigured');
@@ -154,25 +182,14 @@ export default function App() {
   const [authRetry, setAuthRetry] = useState(0);
   const [cloudSyncStatus, setCloudSyncStatus] = useState('local');
   const [difficultyFilter, setDifficultyFilter] = useState('all');
+  const [todayKey, setTodayKey] = useState(() => localDateKey());
   const [showProfileEditor, setShowProfileEditor] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const isCloudUser = authStatus === 'signed-in' && Boolean(authUser?.uid);
-  const todayKey = localDateKey();
-  const dailyQuestion = useMemo(() => getDailyQuestion(DEFAULT_QUESTIONS, todayKey), [todayKey]);
-  const [currentQuestion, setCurrentQuestion] = useState(() => {
-    const today = localDateKey();
-    const potd = getDailyQuestion(DEFAULT_QUESTIONS, today);
-    const potdSolved = store.stats.potdCompletedDates.includes(today);
-    return !potdSolved ? potd : (getLatestPendingConfidenceAttempt(store)?.questionSnapshot || potd);
-  });
-  const [displayedOptions, setDisplayedOptions] = useState(() => {
-    const today = localDateKey();
-    const potd = getDailyQuestion(DEFAULT_QUESTIONS, today);
-    const potdSolved = store.stats.potdCompletedDates.includes(today);
-    const pending = potdSolved ? getLatestPendingConfidenceAttempt(store) : null;
-    const initialQuestion = !potdSolved ? potd : (pending?.questionSnapshot || potd);
-    return restoreDisplayedOptions(initialQuestion, pending, store.history);
-  });
+  const dailyQuestion = useMemo(() => getProfileDailyQuestion(store.profile, todayKey), [todayKey, store.profile?.interests]);
+  const initialHomeSession = getHomeQuestionSession(store, todayKey);
+  const [currentQuestion, setCurrentQuestion] = useState(() => initialHomeSession.question);
+  const [displayedOptions, setDisplayedOptions] = useState(() => restoreDisplayedOptions(initialHomeSession.question, initialHomeSession.attempt, store.history));
   const [optionShuffleRevision, setOptionShuffleRevision] = useState(0);
   const [questionPresentationNonce, setQuestionPresentationNonce] = useState(0);
   const trailSyncFingerprintRef = useRef('');
@@ -188,25 +205,39 @@ export default function App() {
     }
     return orders;
   });
-  const [currentAnswer, setCurrentAnswer] = useState(() => {
-    const pending = getLatestPendingConfidenceAttempt(store);
-    const initialQuestion = pending?.questionSnapshot || getDailyQuestion(DEFAULT_QUESTIONS, localDateKey());
-    return makeAnswerStateFromAttempt(pending || getTodayAttempt(store, initialQuestion?.id));
-  });
-  const [petMood, setPetMood] = useState(() => {
-    const attempt = getTodayAttempt(store, getDailyQuestion(DEFAULT_QUESTIONS, localDateKey())?.id);
-    return attempt ? (attempt.isCorrect ? 'happy' : 'dizzy') : 'idle';
-  });
+  const [currentAnswer, setCurrentAnswer] = useState(() => makeAnswerStateFromAttempt(initialHomeSession.attempt));
+  const [petMood, setPetMood] = useState(() => initialHomeSession.attempt ? (initialHomeSession.attempt.isCorrect ? 'happy' : 'dizzy') : 'idle');
   const [petMessageIndex, setPetMessageIndex] = useState(0);
   const [randomizing, setRandomizing] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [toast, setToast] = useState('');
   const [levelUpCelebrations, setLevelUpCelebrations] = useState([]);
 
+  const potdSolvedForTitle = isPotdCompletedForToday(store, dailyQuestion, todayKey);
+  const shouldShowPotdUrgency = Boolean(dailyQuestion) && ['signed-in', 'guest'].includes(authStatus)
+    && store.profile?.onboardingCompleted === true && !potdSolvedForTitle;
+
   useEffect(() => {
     const labels = { home: 'DailyQuest', analytics: 'Analytics · DailyQuest', diagnostics: 'Diagnostics · DailyQuest' };
-    document.title = labels[activePage] || 'DailyQuest';
-  }, [activePage]);
+    document.title = shouldShowPotdUrgency ? '(1) ⚠️ POTD Unsolved - DailyQuest' : (labels[activePage] || 'DailyQuest');
+  }, [activePage, shouldShowPotdUrgency]);
+
+  // Re-evaluate the deterministic daily POTD when the local date changes, even if the tab
+  // remains open overnight. Visibility/focus handlers catch browsers that throttle timers.
+  useEffect(() => {
+    const refreshDayKey = () => {
+      const nextKey = localDateKey();
+      setTodayKey((previous) => previous === nextKey ? previous : nextKey);
+    };
+    const timer = window.setInterval(refreshDayKey, 30_000);
+    window.addEventListener('focus', refreshDayKey);
+    document.addEventListener('visibilitychange', refreshDayKey);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refreshDayKey);
+      document.removeEventListener('visibilitychange', refreshDayKey);
+    };
+  }, []);
 
   useEffect(() => {
     const addRuntimeError = (message) => setSessionRuntimeErrors((previous) => [
@@ -234,28 +265,29 @@ export default function App() {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }
 
-  const allBuiltInQuestions = useMemo(() => [...DEFAULT_QUESTIONS, ...STARTER_QUESTIONS], []);
+  const allBuiltInQuestions = useMemo(() => BUILT_IN_QUESTIONS, []);
   const allQuestions = useMemo(() => [...allBuiltInQuestions, ...store.customQuestions], [allBuiltInQuestions, store.customQuestions]);
   const displayQuestion = useMemo(() => currentQuestion ? { ...currentQuestion, options: displayedOptions } : currentQuestion, [currentQuestion, displayedOptions]);
   const selectedState = currentAnswer;
   const selectedOptionId = selectedState?.optionId ?? null;
   const isLocked = Boolean(selectedState);
   const isPotd = currentQuestion?.id === dailyQuestion?.id;
-  const potdSolved = store.stats.potdCompletedDates.includes(todayKey);
-  const streak = calculateStreak(store.stats.activeDays, new Date());
+  const potdSolved = isPotdCompletedForToday(store, dailyQuestion, todayKey);
+  const todaySolvedCount = useMemo(() => new Set(
+    store.history
+      .filter((attempt) => attempt?.dateKey === todayKey && attempt?.isCorrect && attempt?.questionId)
+      .map((attempt) => String(attempt.questionId)),
+  ).size, [store.history, todayKey]);
+  const streak = calculateStreak(store.stats.activeDays, new Date(), store.stats.streakFreeze?.protectedDates || []);
   const levelInfo = getLevelInfo(store.stats.xp, store.stats.leveling);
   const level = levelInfo.level;
   const petLevel = Math.floor(store.stats.totalCorrect / 10) + 1;
 
   function restoreQuestionForProfile(profileStore) {
     const today = localDateKey();
-    const potd = getDailyQuestion(DEFAULT_QUESTIONS, today);
-    const potdSolved = profileStore.stats.potdCompletedDates.includes(today);
-    // POTD is the first priority on each new day. Resume a prior pending session
-    // only after today's POTD has already been completed.
-    const pendingAttempt = potdSolved ? getLatestPendingConfidenceAttempt(profileStore) : null;
-    const nextDailyQuestion = !potdSolved ? potd : (pendingAttempt?.questionSnapshot || potd);
-    const savedAttempt = !potdSolved ? getTodayAttempt(profileStore, potd?.id) : (pendingAttempt || getTodayAttempt(profileStore, nextDailyQuestion?.id));
+    const session = getHomeQuestionSession(profileStore, today);
+    const nextDailyQuestion = session.question;
+    const savedAttempt = session.attempt;
     setCurrentQuestion(nextDailyQuestion);
     setDisplayedOptions(restoreDisplayedOptions(nextDailyQuestion, savedAttempt, profileStore.history));
     setOptionShuffleRevision((revision) => revision + 1);
@@ -271,6 +303,13 @@ export default function App() {
     }
     setLastShownOptionOrders(shownOrders);
   }
+
+  const lastAppliedDateKeyRef = useRef(todayKey);
+  useEffect(() => {
+    if (lastAppliedDateKeyRef.current === todayKey) return;
+    lastAppliedDateKeyRef.current = todayKey;
+    restoreQuestionForProfile(store);
+  }, [todayKey, store]);
 
   // Auth startup restores a cached session, then hydrates and watches this user's cloud data.
   useEffect(() => {
@@ -308,7 +347,10 @@ export default function App() {
       const watcher = subscribeToUserCloudStore(user, (remoteSnapshot) => {
         if (disposed || sequence !== loadSequence) return;
         if (!hydrated) pendingRemote = remoteSnapshot;
-        else setStore((previous) => mergeStores(previous, remoteSnapshot.store));
+        else setStore((previous) => {
+        const merged = mergeStores(previous, remoteSnapshot.store);
+        return { ...merged, stats: reconcileStreakFreezeForMissedDay(merged.stats, new Date()) };
+      });
       }, (error) => {
         if (disposed || sequence !== loadSequence) return;
         console.error('Live cloud sync listener failed.', error);
@@ -326,7 +368,8 @@ export default function App() {
         const legacyStore = canClaimLegacy ? readStore() : EMPTY_STORE;
         // Cloud state is merged with the per-account cache and the old local-only profile.
         // Attempts are deduplicated by ID; question edits use their update timestamp.
-        let merged = ensureLevelingProfile(mergeStores(legacyStore, cloud.store, localCache));
+        let merged = ensureLevelingProfile(mergeStores(legacyStore, localCache, cloud.store));
+        merged = { ...merged, stats: reconcileStreakFreezeForMissedDay(merged.stats, new Date()) };
         const cloudProfileHasOnboardingFlag = Object.prototype.hasOwnProperty.call(cloud.store.profile || {}, 'onboardingCompleted');
         const localProfileHasOnboardingFlag = Object.prototype.hasOwnProperty.call(localCache.profile || {}, 'onboardingCompleted');
         const hasPriorAppActivity = Boolean(merged.history.length || merged.customQuestions.length || merged.stats.xp || merged.stats.totalCorrect);
@@ -346,12 +389,14 @@ export default function App() {
               dailyGoal: Number.isFinite(merged.profile?.dailyGoal) ? merged.profile.dailyGoal : null,
               onboardingCompleted: true,
               onboardingVersion: 1,
+              fieldUpdatedAt: { ...(merged.profile?.fieldUpdatedAt || {}) },
               updatedAt: Date.now(),
             },
           };
         } else if (!Object.prototype.hasOwnProperty.call(merged.profile || {}, 'onboardingCompleted')) {
           merged = { ...merged, profile: { ...(merged.profile || {}), onboardingCompleted: false } };
         }
+        merged.profile = stampChangedProfileFields(merged.profile || {}, merged.profile || {}, Number(merged.profile?.updatedAt || Date.now()));
         setStore(merged);
         restoreQuestionForProfile(merged);
         writeStore(merged, userKey);
@@ -430,7 +475,12 @@ export default function App() {
       try {
         setCloudSyncStatus('syncing');
         const cachedStore = readStore(getUserStorageKey(authUser.uid));
-        await saveUserStoreToCloud(authUser, cachedStore);
+        const remote = await loadUserCloudStore(authUser);
+        const reconciledStore = ensureLevelingProfile(mergeStores(cachedStore, store, remote.store));
+        const safeStore = { ...reconciledStore, stats: reconcileStreakFreezeForMissedDay(reconciledStore.stats, new Date()) };
+        setStore(safeStore);
+        writeStore(safeStore, getUserStorageKey(authUser.uid));
+        await saveUserStoreToCloud(authUser, safeStore);
         setCloudSyncStatus('synced');
       } catch (error) {
         console.warn('Automatic cloud retry did not complete; the per-user cache remains safe.', error);
@@ -555,13 +605,21 @@ export default function App() {
     setPetMessageIndex(Math.floor(Math.random() * 3));
 
     const previousPetLevel = Math.floor(store.stats.totalCorrect / 10) + 1;
-    const stats = {
+    let stats = {
       ...store.stats,
+      streakFreeze: normalizeStreakFreeze(store.stats.streakFreeze),
       // Correctness is recorded immediately, but XP is applied exactly once on confidence selection.
       totalCorrect: store.stats.totalCorrect + (correct ? 1 : 0),
       activeDays: correct ? [...new Set([...store.stats.activeDays, dateKey])] : store.stats.activeDays,
       potdCompletedDates: correct && isPotd ? [...new Set([...store.stats.potdCompletedDates, dateKey])] : store.stats.potdCompletedDates,
+      potdCompletedQuestionIdsByDate: correct && isPotd ? {
+        ...(store.stats.potdCompletedQuestionIdsByDate || {}),
+        [dateKey]: [...new Set([...(store.stats.potdCompletedQuestionIdsByDate?.[dateKey] || []), String(currentQuestion.id)])],
+      } : (store.stats.potdCompletedQuestionIdsByDate || {}),
     };
+    stats = reconcileStreakFreezeForMissedDay(stats, new Date(timestamp));
+    const freezeAward = correct ? grantStreakFreezeForConsistency(stats, new Date(timestamp)) : { stats, granted: false };
+    stats = freezeAward.stats;
     const nextPetLevel = Math.floor(stats.totalCorrect / 10) + 1;
     const levelUpEvents = [];
     if (nextPetLevel > previousPetLevel) {
@@ -572,7 +630,7 @@ export default function App() {
     if (isCloudUser && authUser) {
       writeStore(nextStore, getUserStorageKey(authUser.uid));
       setCloudSyncStatus('syncing');
-      syncAttemptToFirestore(authUser, attempt, stats).then(() => setCloudSyncStatus('synced')).catch((error) => {
+      syncAttemptToFirestore(authUser, attempt, stats, nextStore.profile).then(() => setCloudSyncStatus('synced')).catch((error) => {
         console.warn('Cloud sync did not complete; the local cache remains safe.', error);
         setCloudSyncStatus('error');
       });
@@ -595,6 +653,7 @@ export default function App() {
       playUiSound('petLevelUp', { delaySeconds: 0.55 });
       setToast(levelUpEvents.map((event) => `${event.emoji} ${event.title} Level ${event.level}!`).join('  '));
     }
+    if (freezeAward.granted) setToast((previous) => `${previous ? `${previous} · ` : ''}🧊 Streak Freeze earned for your consistency!`);
   }
 
   function handleAnswer(optionId) {
@@ -636,7 +695,7 @@ export default function App() {
     if (isCloudUser && authUser) {
       writeStore(nextStore, getUserStorageKey(authUser.uid));
       setCloudSyncStatus('syncing');
-      syncAttemptToFirestore(authUser, updatedAttempt, stats).then(() => setCloudSyncStatus('synced')).catch((error) => {
+      syncAttemptToFirestore(authUser, updatedAttempt, stats, nextStore.profile).then(() => setCloudSyncStatus('synced')).catch((error) => {
         console.warn('Confidence choice could not sync yet; local profile is preserved.', error);
         setCloudSyncStatus('error');
       });
@@ -793,7 +852,7 @@ export default function App() {
     }));
     if (isCloudUser && authUser && changedQuestions.length) {
       setCloudSyncStatus('syncing');
-      syncQuestionsToFirestore(authUser, changedQuestions, store.stats)
+      syncQuestionsToFirestore(authUser, changedQuestions, store.stats, store.profile)
         .then(() => setCloudSyncStatus('synced'))
         .catch((error) => { console.warn('Imported questions are cached locally but did not sync to cloud.', error); setCloudSyncStatus('error'); });
     }
@@ -816,9 +875,10 @@ export default function App() {
   async function handleProfileSave(profile) {
     const wasEditingProfile = showProfileEditor;
     setProfileSaving(true);
-    const nextStore = { ...store, profile: { ...profile, updatedAt: Date.now() } };
+    const nextStore = { ...store, profile: stampChangedProfileFields(store.profile || {}, profile, Date.now()) };
     const userKey = isCloudUser && authUser?.uid ? getUserStorageKey(authUser.uid) : undefined;
     setStore(nextStore);
+    restoreQuestionForProfile(nextStore);
     writeStore(nextStore, userKey);
     try {
       if (isCloudUser && authUser) {
@@ -880,7 +940,10 @@ export default function App() {
     setAuthError('');
     try {
       const userKey = getUserStorageKey(authUser.uid);
-      const cachedStore = mergeStores(readStore(userKey), store);
+      const remote = await loadUserCloudStore(authUser);
+      const merged = ensureLevelingProfile(mergeStores(readStore(userKey), store, remote.store));
+      const cachedStore = { ...merged, stats: reconcileStreakFreezeForMissedDay(merged.stats, new Date()) };
+      setStore(cachedStore);
       writeStore(cachedStore, userKey);
       await saveUserStoreToCloud(authUser, cachedStore);
       setCloudSyncStatus('synced');
@@ -927,7 +990,6 @@ export default function App() {
   const displayName = String(store.profile?.preferredName || '').trim() || (isCloudUser ? getFirstName(authUser) : '');
   const displayLabel = displayName || 'Your account';
   const displayInitial = (displayName || authUser?.email || 'U').slice(0, 1).toUpperCase();
-  const statusLabel = potdSolved ? 'POTD SOLVED FOR TODAY!' : 'POTD PENDING FOR TODAY';
 
   const analyticsProps = {
     store,
@@ -988,18 +1050,42 @@ export default function App() {
       </header>
 
       <main className={`app-main app-main-${activePage}`}>
+        {shouldShowPotdUrgency && (
+          <div className="potd-urgency-alert" role="alert" aria-live="polite">
+            <span className="potd-urgency-icon" aria-hidden="true">⚠️</span>
+            <strong>STREAK IN DANGER!</strong>
+            <span>Solve today's POTD to keep your streak alive!</span>
+            {store.stats.streakFreeze?.available && <small>🧊 Streak Freeze ready as a backup.</small>}
+            {store.stats.streakFreeze?.lastUsedDate === localDateKey(new Date(Date.now() - 86400000)) && <small>🧊 Yesterday's gap was protected; keep today's streak going.</small>}
+          </div>
+        )}
         {activePage === 'home' && (
           <div className="home-page">
             <section className="welcome-row">
               <div className="welcome-copy">
                 <div className="welcome-kicker"><span className="kicker-line" /> YOUR DAILY BRAIN GYM <span className="kicker-line" /></div>
                 <h1>{displayName ? `${displayName}, solve this question` : 'Solve this question'}<br className="desktop-break" /> and <span>start your day!</span></h1>
-                <p>One question. A sharper brain. Zero excuses. <span className="sun-scribble">✳</span></p>
               </div>
-              <div className={`potd-status ${potdSolved ? 'potd-status-solved' : 'potd-status-pending'}`}>
-                <div className="status-burst">{potdSolved ? '✓' : '🔥'}</div>
-                <div className="status-copy"><span>PROBLEM OF THE DAY</span><strong>{statusLabel}</strong><small>{potdSolved ? 'Daily mission complete. Keep the streak warm.' : 'Your daily mission is waiting.'}</small></div>
-                <div className="status-sparkle">✦</div>
+              <div className="welcome-utility-cards">
+                <div className="today-solved-card" aria-label={`${todaySolvedCount} unique questions solved today`}>
+                  <span className="today-solved-label">TODAY</span>
+                  <strong>{todaySolvedCount}</strong>
+                  <small>QUESTIONS SOLVED</small>
+                </div>
+                <button
+                  type="button"
+                  className={`potd-quick-widget ${potdSolved ? 'potd-quick-widget-solved' : 'potd-quick-widget-pending'}`}
+                  onClick={handleReturnToPotd}
+                  disabled={!dailyQuestion}
+                  aria-label={potdSolved ? 'POTD solved today. Click to review the problem of the day.' : 'POTD ready. Click to solve today’s problem of the day.'}
+                >
+                  <span className="potd-quick-icon" aria-hidden="true">{potdSolved ? <CheckCircle2 size={23} strokeWidth={3} /> : '⭐'}</span>
+                  <span className="potd-quick-copy">
+                    <strong>{potdSolved ? 'POTD Solved Today' : 'POTD Ready — Click to Solve'}</strong>
+                    <small>{!dailyQuestion ? 'No questions match your selected topics' : potdSolved ? 'Review today’s completed challenge' : `Today’s challenge · ${dailyQuestion.category}`}</small>
+                  </span>
+                  <ChevronRight className="potd-quick-arrow" size={21} aria-hidden="true" />
+                </button>
               </div>
             </section>
 
