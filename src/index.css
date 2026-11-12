@@ -1627,7 +1627,17 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #15b8d2; outli
   .app-main { flex: 1 1 auto; width: 100%; max-width: none; min-height: 0; margin: 0; padding: clamp(7px, 1.05vh, 14px) clamp(14px, 1.8vw, 34px) 8px; overflow: hidden; }
   .app-main-home { display: flex; flex-direction: column; }
   .home-page { display: flex; flex: 1 1 auto; flex-direction: column; gap: clamp(7px, .9vh, 12px); width: 100%; max-width: none; min-width: 0; min-height: 0; height: 100%; margin: 0; }
-  .home-page .welcome-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(250px, 23vw); align-items: center; gap: clamp(10px, 1.3vw, 24px); flex: 0 0 auto; min-width: 0; min-height: clamp(72px, 10.5vh, 116px); margin: 0; padding: 0; }
+  .home-page .welcome-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto; /* Forces the boxes column to shrink-wrap and move left */
+    align-items: center;
+    gap: 12px; /* Shrinks the gap between text and boxes */
+    flex: 0 0 auto;
+    min-width: 0;
+    min-height: clamp(72px, 10.5vh, 116px);
+    margin: 0;
+    padding: 0;
+  }
   .home-page .welcome-copy { min-width: 0; padding: 0; }
   .home-page .welcome-kicker { margin-bottom: clamp(5px, .7vh, 10px); font-size: clamp(8px, .62vw, 10px); }
   .home-page .welcome-copy h1 { margin: 0; font-size: clamp(28px, 2.7vw, 64px); line-height: 1.02; letter-spacing: -.055em; text-wrap: balance; }
@@ -3141,9 +3151,40 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #15b8d2; outli
   z-index: 9999;
 }
 
-@media (max-width: 900px) {
-  .home-page .welcome-row,
+@media (min-width: 901px) {
+  .home-page .welcome-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 16px;
+    padding-top: 6px;
+  }
+
   .home-page .welcome-utility-cards {
-    overflow: visible;
+    width: auto;
+    max-width: 100%;
+    margin-right: 8px;
+    gap: 10px;
+  }
+
+  .home-page .today-solved-card {
+    flex: 0 0 96px;
+  }
+
+  .home-page .potd-quick-widget {
+    flex: 0 1 220px;
+    width: 220px;
+    min-width: 0;
+  }
+
+  /* Sticky action bar: cover the card's bottom edge fully */
+  .home-page #question-card-start {
+    padding-bottom: 0;
+  }
+
+  .home-page #question-card-start .question-actions {
+    bottom: 0;
+    margin-top: auto;
+    padding: 12px 0 14px;
+    background: #fff;
+    border-top: 1px solid #eee8f8;
   }
 }
