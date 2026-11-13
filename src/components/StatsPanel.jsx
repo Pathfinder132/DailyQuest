@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, BookOpen, Brain, CalendarCheck, CheckCircle2, Cloud, Download, Flame, History, ShieldAlert, Sparkles, Target, Upload } from 'lucide-react';
+import { Activity, BookOpen, Brain, CalendarCheck, CheckCircle2, CircleHelp, Cloud, Download, Flame, History, ShieldAlert, Sparkles, Target, Upload } from 'lucide-react';
 import { formatDateTime, getLevelInfo, localDateKey } from '../lib/utils.js';
 import QuestionBankDiagnostics from './QuestionBankDiagnostics.jsx';
 
@@ -9,15 +9,16 @@ export default function StatsPanel({ view = 'sidebar', store, streak, level, pet
   const correct = store.history.filter((attempt) => attempt.isCorrect).length;
   const attempts = store.history.length;
   const accuracy = attempts ? Math.round((correct / attempts) * 100) : 0;
-  const confidenceAttempts = store.history.filter((attempt) => ['explicit', 'shaky'].includes(attempt.confidenceStatus));
+  const confidenceAttempts = store.history.filter((attempt) => ['explicit', 'shaky', 'idk'].includes(attempt.confidenceStatus));
   const shakyAttempts = confidenceAttempts.filter((attempt) => attempt.confidenceStatus === 'shaky').length;
+  const idkAttempts = confidenceAttempts.filter((attempt) => attempt.confidenceStatus === 'idk').length;
   const latestAttemptByQuestion = new Map();
   for (const attempt of [...store.history].sort((a, b) => Number(a.timestamp || 0) - Number(b.timestamp || 0))) {
     if (attempt.questionId) latestAttemptByQuestion.set(String(attempt.questionId), attempt);
   }
   const latestQuestionAttempts = [...latestAttemptByQuestion.values()];
   const masteredQuestions = latestQuestionAttempts.filter((attempt) => attempt.isCorrect && attempt.confidenceStatus === 'explicit' && !attempt.needsReview).length;
-  const reviewQuestions = latestQuestionAttempts.filter((attempt) => Boolean(attempt.needsReview) || !attempt.isCorrect || attempt.confidenceStatus === 'shaky').length;
+  const reviewQuestions = latestQuestionAttempts.filter((attempt) => Boolean(attempt.needsReview) || !attempt.isCorrect || attempt.confidenceStatus === 'shaky' || attempt.confidenceStatus === 'idk').length;
   const today = localDateKey();
   const todayAttempts = store.history.filter((attempt) => attempt.dateKey === today).length;
   const active = new Set(store.stats.activeDays || []);
@@ -66,6 +67,7 @@ export default function StatsPanel({ view = 'sidebar', store, streak, level, pet
           <div className="confidence-analytics-metric confidence-metric-mastered"><CheckCircle2 size={17} /><strong>{masteredQuestions}</strong><span>Mastered candidates</span></div>
           <div className="confidence-analytics-metric confidence-metric-review"><ShieldAlert size={17} /><strong>{reviewQuestions}</strong><span>Questions to review</span></div>
           <div className="confidence-analytics-metric confidence-metric-shaky"><Target size={17} /><strong>{shakyAttempts}</strong><span>Shaky attempts</span></div>
+          <div className="confidence-analytics-metric confidence-metric-idk"><CircleHelp size={17} /><strong>{idkAttempts}</strong><span>Marked “I don't know”</span></div>
         </div>
         <p className="muted-note">Mastery is counted per question using its latest attempt. Shaky responses and incorrect answers stay in review.</p>
       </section>

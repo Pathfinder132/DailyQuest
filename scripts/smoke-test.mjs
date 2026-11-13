@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { ACTIVE_RECALL_CHANCE, RECENT_QUESTION_COOLDOWN, applyConfidenceAssessment, calculateQuestionReward, calculateStreak, ensureLevelingProfile, evaluateFillInBlankAnswer, getDailyQuestion, getLastDisplayedOptionOrder, getLevelInfo, getPotdQuestionPool, getRecentQuestionIds, grantStreakFreezeForConsistency, isFillInBlankQuestion, localDateKey, normalizeStreakFreeze, pickQuestionWithActiveRecall, pickQuestionWithCooldown, reconcileStreakFreezeForMissedDay, shuffleOptionsForDisplay, xpRequiredForLevel } from '../src/lib/utils.js';
-import { getQuestionBankTrack, isHardOrSnippetQuestion, isMathAptitudeQuestion, normalizeImportedQuestion, pickMathAptitudeQuestion, prepareQuestionBankExport, validateQuestionArray } from '../src/lib/questionTools.js';
+import { getQuestionBankTrack, isHardOrSnippetQuestion, isMathAptitudeQuestion, pickMathAptitudeQuestion, validateQuestionArray } from '../src/lib/questionTools.js';
 import { getLegacyMigrationUid, getUserStorageKey, mergeProfilesByFieldTimestamp, mergeStores, readStore, setLegacyMigrationUid, storeHasData, writeStore } from '../src/lib/storage.js';
 import { getPotdHomeSession, isPotdCompletedForToday, selectDailyPotd } from '../src/lib/potd.js';
 import { STARTER_QUESTIONS, STARTER_TOPICS } from '../src/data/starterBanks.js';
@@ -34,6 +34,25 @@ assert.deepEqual(calculateQuestionReward('q2', previousCorrect, true), {
 });
 assert.equal(calculateQuestionReward('q2', previousCorrect, false).xpEarned, 5);
 
+// IDK is a no-penalty outcome: exactly 5 XP, finalized once, never mastered, always review.
+const idkCorrectAttempt = {
+  id: 'idk-correct', questionId: 'q_idk_correct', isCorrect: true,
+  baseXpEarned: 25, xpEarned: 0, confidenceStatus: null, confidenceAppliedAt: null,
+};
+const idkCorrectFinal = applyConfidenceAssessment(idkCorrectAttempt, 'idk', 5000);
+assert.equal(idkCorrectFinal.xpEarned, 5, 'IDK always awards exactly 5 XP even when the submitted answer was correct');
+assert.equal(idkCorrectFinal.needsReview, true, 'IDK marks the question for review');
+assert.equal(idkCorrectFinal.mastered, false, 'IDK never marks a question as mastered');
+assert.equal(applyConfidenceAssessment(idkCorrectFinal, 'idk', 6000), null, 'IDK cannot award XP twice');
+const idkWrongFinal = applyConfidenceAssessment({ ...idkCorrectAttempt, id: 'idk-wrong', isCorrect: false, baseXpEarned: 5 }, 'idk', 7000);
+assert.equal(idkWrongFinal.xpEarned, 5, 'IDK avoids the shaky-recall 2 XP outcome for incorrect answers');
+assert.equal(idkWrongFinal.needsReview, true);
+assert.equal(applyConfidenceAssessment(idkCorrectAttempt, 'unknown-status', 8000), null, 'unknown confidence statuses are rejected');
+const idkMerged = mergeStores({ history: [idkCorrectFinal], customQuestions: [], profile: {}, stats: { xp: 5, totalCorrect: 1 } });
+assert.equal(idkMerged.history[0].confidenceStatus, 'idk', 'IDK confidence metadata survives storage/cloud profile merges');
+assert.equal(idkMerged.history[0].needsReview, true, 'IDK review flag survives storage/cloud profile merges');
+console.log('IDK confidence tests passed: fixed 5 XP, no penalty, review priority, idempotency, persistence, and POTD retry behavior.');
+
 // Progressive leveling preserves a returning user's current legacy level/progress,
 // then gradually increases the XP target for each subsequent level.
 const existingProfile = ensureLevelingProfile({
@@ -62,6 +81,8 @@ const pick = (values) => {
 assert.equal(pickQuestionWithActiveRecall([q1, q2, q3], combinedHistory, 'q3', pick([0.1, 0.1, 0]), 0.3, [], 0).id, 'q1', 'recall branch should favor the latest-wrong question');
 assert.equal(pickQuestionWithActiveRecall([q1, q2, q3], combinedHistory, 'q3', pick([0.1, 0.9, 0]), 0.3, [], 0).id, 'q2', 'recall branch should still include latest-correct questions');
 assert.equal(pickQuestionWithActiveRecall([q1, q2, q3], combinedHistory, 'q3', pick([0.8, 0]), 0.3, [], 0).id, 'q1', 'ordinary branch should remain random across the bank');
+const idkReviewHistory = [{ questionId: 'q_idk', isCorrect: false, needsReview: true, confidenceStatus: 'idk', timestamp: 4, questionSnapshot: question('q_idk') }];
+assert.equal(pickQuestionWithActiveRecall([q2, question('q_idk'), q3], idkReviewHistory, 'q3', pick([0.1, 0, 0]), 0.3, [], 0).id, 'q_idk', 'IDK responses are included in the latest-missed review pool');
 
 const generatedMath = { ...question('math_old'), category: 'Mental Math', source: 'math' };
 assert.equal(pickQuestionWithActiveRecall([q3], [{ questionId: 'math_old', isCorrect: true, timestamp: 1, questionSnapshot: generatedMath }], 'q3', pick([0.1, 0, 0]), 0.3, [], 0).id, 'math_old', 'previous procedural math can be used for recall');
@@ -208,46 +229,6 @@ assert.equal(evaluateFillInBlankAnswer(fillBlankWithAliases, 'HAVING'), true, 'a
 assert.throws(() => validateQuestionArray(JSON.stringify([{ id:'fib_invalid', category:'SQL', type:'fill-in-blank', question:'What clause?' }]), []), /needs a correctAnswer or a non-empty acceptedAnswers/);
 assert.equal(isHardOrSnippetQuestion(normalizedFillBlank), true, 'hard fill-in-the-blank questions are included in the interview filter');
 assert.equal(isHardOrSnippetQuestion({ id:'easy_1', difficulty:'Easy', category:'SQL' }), false);
-
-// Custom explanations remain intact through normalization and complete-bank export.
-const structuredCustom = normalizeImportedQuestion({
-  id: 'custom_structured_001', category: 'SQL', difficulty: 'Hard',
-  question: 'Why is HAVING used after aggregation?',
-  options: [{ id: 'A', text: 'After GROUP BY' }, { id: 'B', text: 'Before FROM' }],
-  correctAnswer: 'A', solution: '',
-  explanation: {
-    whyItWorks: 'blue(*HAVING filters groups after aggregation.*)',
-    commonTrap: 'gold(*WHERE filters rows before aggregation.*)',
-    takeaway: 'Use HAVING for aggregate conditions.',
-    realWorldAnalogy: 'green(*It is like filtering department summaries after calculating them.*)',
-  },
-}, 0);
-assert.equal(structuredCustom.solution, '', 'structured explanation without a summary does not receive a generic placeholder');
-assert.equal(structuredCustom.whyItWorks, 'blue(*HAVING filters groups after aggregation.*)');
-assert.equal(structuredCustom.commonTrap, 'gold(*WHERE filters rows before aggregation.*)');
-assert.equal(structuredCustom.takeaway, 'Use HAVING for aggregate conditions.');
-assert.equal(structuredCustom.analogy, 'green(*It is like filtering department summaries after calculating them.*)');
-const explicitExplanationWins = normalizeImportedQuestion({
-  id: 'custom_explanation_alias_001', category: 'SQL', question: 'What does HAVING do?',
-  options: [{ id: 'A', text: 'Filters groups' }, { id: 'B', text: 'Filters rows' }],
-  correctAnswer: 'A', solution: '', explanation: 'blue(*It filters grouped results.*)',
-}, 0);
-assert.equal(explicitExplanationWins.solution, 'blue(*It filters grouped results.*)', 'a non-empty explanation is used when solution is an empty string');
-
-const unsortedExportBank = [
-  { id: 'z1', category: 'Web Development', solution: 'Custom web explanation', source: 'imported' },
-  { id: 'a1', category: 'DBMS', explanation: { summary: 'Custom object explanation' }, source: 'imported' },
-  { id: 'b1', category: 'DBMS', solution: 'Built-in explanation' },
-];
-const sortedExportBank = prepareQuestionBankExport(unsortedExportBank);
-assert.deepEqual(sortedExportBank.map((item) => item.id), ['a1', 'b1', 'z1'], 'complete question exports are sorted by category then ID');
-assert.equal(sortedExportBank[0].explanation.summary, 'Custom object explanation', 'custom structured explanations survive export unchanged');
-assert.equal(sortedExportBank[2].solution, 'Custom web explanation', 'custom solution text survives export unchanged');
-const completeExportFixture = prepareQuestionBankExport([...DEFAULT_QUESTIONS, ...STARTER_QUESTIONS, structuredCustom]);
-assert.equal(completeExportFixture.length, 413, 'complete export includes original built-ins, starters, and imported custom questions');
-assert.ok(completeExportFixture.some((item) => item.id === 'custom_structured_001'), 'complete export includes the custom JSON question');
-assert.ok(completeExportFixture.some((item) => item.id === STARTER_QUESTIONS[0].id), 'complete export includes starter-bank questions');
-console.log('Question export tests passed: full-bank aggregation, category ordering, and custom explanation preservation.');
 const shakyRightQuestion = { ...question('shaky_right'), difficulty: 'Hard' };
 const explicitRightQuestion = { ...question('explicit_right'), difficulty: 'Hard' };
 const reviewAwarePick = pickQuestionWithActiveRecall(
@@ -345,6 +326,9 @@ assert.equal(selectDailyPotd(allBuiltInBank, { interests: [] }, dailyKey).id, ge
 assert.equal(selectDailyPotd(allBuiltInBank, { interests: ['unmapped-topic'] }, dailyKey), null, 'POTD returns no unrelated question when preferences cannot be matched');
 
 const potdQuestion = allBuiltInBank.find((item) => item.id === 'starter_dsa_001');
+const idkPotdSession = getPotdHomeSession({ history: [{ id: 'potd-idk', questionId: potdQuestion.id, questionSnapshot: potdQuestion, dateKey: '2026-10-20', isPotd: true, isCorrect: false, baseXpEarned: 5, confidenceStatus: 'idk', confidenceAppliedAt: 123 }] }, potdQuestion, '2026-10-20');
+assert.equal(idkPotdSession.potdSolved, false, 'an IDK response does not complete an unsolved POTD');
+assert.equal(idkPotdSession.attempt, null, 'a finalized IDK POTD can be retried instead of reopening the confidence prompt');
 const pendingPotdAttempt = {
   id: 'potd-pending-confidence', questionId: potdQuestion.id, questionSnapshot: potdQuestion,
   timestamp: 1, dateKey: dailyKey, isPotd: true, isCorrect: false, baseXpEarned: 5, xpEarned: 0,

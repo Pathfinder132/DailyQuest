@@ -427,7 +427,7 @@ export function pickQuestionWithActiveRecall(
   for (const question of selectable) {
     const latest = latestAttemptById.get(String(question.id));
     if (!latest) continue;
-    if (!latest.isCorrect || latest.needsReview || latest.confidenceStatus === 'shaky') latestWrong.push(question);
+    if (!latest.isCorrect || latest.needsReview || latest.confidenceStatus === 'shaky' || latest.confidenceStatus === 'idk') latestWrong.push(question);
     else latestCorrect.push(question);
   }
 
@@ -452,21 +452,29 @@ export function pickQuestionWithActiveRecall(
  * making duplicate clicks/replays unable to award XP twice. Wrong answers retain the
  * ordinary practice-XP base but stay in review regardless of confidence choice.
  */
+export const CONFIDENCE_STATUSES = Object.freeze(['explicit', 'shaky', 'idk']);
+export const IDK_XP_REWARD = 5;
+
 export function applyConfidenceAssessment(attempt, confidenceStatus, timestamp = Date.now()) {
-  if (!attempt || !['explicit', 'shaky'].includes(confidenceStatus)) return null;
+  if (!attempt || !CONFIDENCE_STATUSES.includes(confidenceStatus)) return null;
   if (attempt.confidenceStatus || attempt.confidenceAppliedAt) return null;
+
   const baseXpEarned = Math.max(0, Math.floor(Number(attempt.baseXpEarned) || 0));
-  const xpEarned = confidenceStatus === 'shaky'
-    ? (baseXpEarned > 0 ? Math.max(1, Math.floor(baseXpEarned / 2)) : 0)
-    : baseXpEarned;
+  // IDK is a no-penalty learning signal: it always awards 5 XP and queues a review,
+  // regardless of whether the submitted guess happened to be correct.
+  const xpEarned = confidenceStatus === 'idk'
+    ? IDK_XP_REWARD
+    : confidenceStatus === 'shaky'
+      ? (baseXpEarned > 0 ? Math.max(1, Math.floor(baseXpEarned / 2)) : 0)
+      : baseXpEarned;
   const isCorrect = Boolean(attempt.isCorrect);
   return {
     ...attempt,
     xpEarned,
     confidenceStatus,
-    confidenceMultiplier: confidenceStatus === 'shaky' ? 0.5 : 1,
+    confidenceMultiplier: confidenceStatus === 'idk' ? null : confidenceStatus === 'shaky' ? 0.5 : 1,
     confidenceAppliedAt: timestamp,
-    needsReview: !isCorrect || confidenceStatus === 'shaky',
+    needsReview: confidenceStatus === 'idk' || !isCorrect || confidenceStatus === 'shaky',
     mastered: Boolean(isCorrect && confidenceStatus === 'explicit'),
     requiresConfidence: false,
   };

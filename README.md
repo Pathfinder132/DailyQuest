@@ -70,3 +70,7 @@ Question selection uses a 25-distinct-question recency cooldown when alternative
 ### Question formats
 
 Imported questions support the existing multiple-choice format and `type: "fill-in-blank"` for typed answers. Fill-in-the-blank questions require `id`, `category`, `question`, and `correctAnswer` (or `acceptedAnswers`); options are not required. Both `solution` and `explanation` are accepted. Optional `difficulty` supports the Hard / Interview Snippet filter. After each new answer, record confidence to finalize XP; shaky recall is included in review analytics and Firestore/local history.
+
+### Confidence-aware active recall
+
+After answering, choose explicit knowledge, shaky recall, or **I Don’t Know**. The IDK choice awards exactly 5 XP without a penalty and marks the question for future review. Confidence is stored per attempt and synchronized with the user profile.

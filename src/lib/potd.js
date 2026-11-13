@@ -13,7 +13,7 @@ export function selectDailyPotd(builtInQuestions = [], profile = {}, dateKey) {
 function isPendingConfidence(attempt) {
   return Boolean(attempt?.id && attempt?.questionSnapshot?.id
     && Number.isFinite(attempt.baseXpEarned)
-    && !['explicit', 'shaky'].includes(attempt.confidenceStatus)
+    && !['explicit', 'shaky', 'idk'].includes(attempt.confidenceStatus)
     && !attempt.confidenceAppliedAt);
 }
 

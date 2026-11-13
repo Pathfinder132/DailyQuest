@@ -14,7 +14,7 @@ import { DEFAULT_PET_ID } from './data/pets.js';
 import { selectDailyPotd, getPotdHomeSession, isPotdCompletedForToday } from './lib/potd.js';
 import { EMPTY_STORE, exportProgress, getLegacyMigrationUid, getUserStorageKey, mergeStores, readStore, setLegacyMigrationUid, writeStore } from './lib/storage.js';
 import { isHardOrSnippetQuestion, isMathAptitudeQuestion, makeMentalMathQuestion, pickMathAptitudeQuestion } from './lib/questionTools.js';
-import { ACTIVE_RECALL_CHANCE, RECENT_QUESTION_COOLDOWN, applyConfidenceAssessment, calculateStreak, ensureLevelingProfile, evaluateFillInBlankAnswer, normalizeStreakFreeze, reconcileStreakFreezeForMissedDay, grantStreakFreezeForConsistency, getLastDisplayedOptionOrder, getLevelInfo, isFillInBlankQuestion, localDateKey, makeId, pickQuestionWithActiveRecall, calculateQuestionReward, shuffleOptionsForDisplay } from './lib/utils.js';
+import { ACTIVE_RECALL_CHANCE, RECENT_QUESTION_COOLDOWN, CONFIDENCE_STATUSES, applyConfidenceAssessment, calculateStreak, ensureLevelingProfile, evaluateFillInBlankAnswer, normalizeStreakFreeze, reconcileStreakFreezeForMissedDay, grantStreakFreezeForConsistency, getLastDisplayedOptionOrder, getLevelInfo, isFillInBlankQuestion, localDateKey, makeId, pickQuestionWithActiveRecall, calculateQuestionReward, shuffleOptionsForDisplay } from './lib/utils.js';
 import { playUiSound } from './lib/sounds.js';
 import { isFirebaseConfigured, saveUserStoreToCloud, signInWithGoogle, signOutCurrentUser, subscribeToAuthChanges, subscribeToUserCloudStore, syncAttemptToFirestore, syncQuestionsToFirestore, syncRecentQuestionTrailToFirestore, checkUserCloudProfile, loadUserCloudStore } from './lib/firebaseSync.js';
 
@@ -669,7 +669,7 @@ export default function App() {
   }
 
   function handleConfidenceSelect(confidenceStatus) {
-    if (!currentAnswer?.requiresConfidence || !currentAnswer.attemptId || !['explicit', 'shaky'].includes(confidenceStatus)) return;
+    if (!currentAnswer?.requiresConfidence || !currentAnswer.attemptId || !CONFIDENCE_STATUSES.includes(confidenceStatus)) return;
     const originalAttempt = store.history.find((attempt) => attempt.id === currentAnswer.attemptId);
     if (!originalAttempt) return;
     const updatedAttempt = applyConfidenceAssessment(originalAttempt, confidenceStatus, Date.now());
@@ -707,13 +707,15 @@ export default function App() {
       popLevelUpConfetti([event]);
       playUiSound('playerLevelUp', { delaySeconds: 0.55 });
     } else {
-      playUiSound(confidenceStatus === 'explicit' ? 'confidence' : 'shaky');
+      playUiSound(confidenceStatus === 'explicit' ? 'confidence' : confidenceStatus === 'shaky' ? 'shaky' : 'idk');
     }
-    const confidenceSummary = confidenceStatus === 'shaky'
-      ? `Shaky recall saved · +${xpEarned} XP · queued for review.`
-      : !originalAttempt.isCorrect
-        ? `Confidence recorded · +${xpEarned} practice XP · queued for review.`
-        : `Confidence recorded · +${xpEarned} XP${updatedAttempt.mastered ? ' · mastered candidate.' : '.'}`;
+    const confidenceSummary = confidenceStatus === 'idk'
+      ? `No penalty for not knowing · +${xpEarned} XP · added to active recall.`
+      : confidenceStatus === 'shaky'
+        ? `Shaky recall saved · +${xpEarned} XP · queued for review.`
+        : !originalAttempt.isCorrect
+          ? `Confidence recorded · +${xpEarned} practice XP · queued for review.`
+          : `Confidence recorded · +${xpEarned} XP${updatedAttempt.mastered ? ' · mastered candidate.' : '.'}`;
 
     // Confidence is the end of an answer run: immediately advance to a fresh question
     // using the just-updated history, review flags, difficulty filter, and cooldown.

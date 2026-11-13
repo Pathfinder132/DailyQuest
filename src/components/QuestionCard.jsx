@@ -54,7 +54,7 @@ export default function QuestionCard({
   const correctOptionText = question.options?.find((option) => option.id === question.correctAnswer)?.text || question.correctAnswer;
   const difficulty = difficultyPresentation(question);
   const halfXp = baseXpEarned > 0 ? Math.max(1, Math.floor(baseXpEarned / 2)) : 0;
-  const confidenceSaved = confidenceStatus === 'explicit' || confidenceStatus === 'shaky';
+  const confidenceSaved = ['explicit', 'shaky', 'idk'].includes(confidenceStatus);
 
   function submitTypedAnswer(event) {
     event.preventDefault();
@@ -165,11 +165,27 @@ export default function QuestionCard({
           )}
           {confidenceEligible && (
             <div className="confidence-assessment" aria-labelledby={`confidence-title-${question.id}`}>
-              <div className="confidence-heading"><Brain size={18} /><div><strong id={`confidence-title-${question.id}`}>How confident were you?</strong><span>Your honest check tunes future active recall.</span></div></div>
+              <div className="confidence-heading">
+                <Brain size={18} />
+                <div>
+                  <strong id={`confidence-title-${question.id}`}>How confident were you?</strong>
+                  <span>Your honest check tunes future active recall.</span>
+                </div>
+                {!confidenceSaved && (
+                  <button type="button" className="confidence-idk-button" onClick={() => onConfidenceSelect?.('idk')} aria-label="I don't know this yet. Mark for review and earn 5 XP.">
+                    <strong>🤷 I DON'T KNOW</strong>
+                    <small>+5 XP · no penalty · review later</small>
+                  </button>
+                )}
+              </div>
               {confidenceSaved ? (
                 <div className={`confidence-saved confidence-saved-${confidenceStatus}`} role="status">
                   <Check size={17} />
-                  <span>{confidenceStatus === 'explicit' ? 'Explicit knowledge recorded' : 'Shaky recall recorded'} · +{earnedXp} XP{(confidenceStatus === 'shaky' || !isCorrect) ? ' · sent to review' : ' · marked as a mastered candidate'}</span>
+                  <span>{confidenceStatus === 'explicit'
+                    ? `Explicit knowledge recorded · +${earnedXp} XP${isCorrect ? ' · mastery candidate' : ' · sent to review'}`
+                    : confidenceStatus === 'shaky'
+                      ? `Shaky recall recorded · +${earnedXp} XP · sent to review`
+                      : `No worries — marked as unknown · +${earnedXp} XP · added to review queue`}</span>
                 </div>
               ) : (
                 <div className="confidence-buttons">

@@ -12,3 +12,13 @@ Randomness is probabilistic rather than a guaranteed round-robin. The cooldown r
 
 - **Confidence auto-advance:** After a confidence choice finalizes the attempt and one-time XP, DailyQuest immediately picks and presents the next question using the updated history, difficulty filter, review flags, and recency cooldown.
 - **Player level:** The Home header shows the account-level badge immediately left of Sign out; it updates reactively from saved XP and is separate from the pet level.
+
+## Confidence outcomes (including IDK)
+
+Each submitted attempt can be finalized with one of three confidence outcomes:
+
+- `explicit`: full normal XP; a correct answer can become a mastered candidate.
+- `shaky`: half the normal XP (minimum 1 when the base reward is positive); always queued for review.
+- `idk`: exactly 5 XP, with no deduction; always marked `needsReview: true` and never marked mastered.
+
+The IDK outcome is stored on the attempt in local storage and Firestore like the other confidence values. It enters the latest-missed/review pool for active recall. The question's objective correctness remains unchanged: a correctly selected answer is still recorded as correct, while an incorrect POTD remains unsolved and can be retried. Confidence can only be finalized once per attempt.

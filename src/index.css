@@ -125,9 +125,9 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #15b8d2; outli
 .question-prompt { position: relative; z-index: 1; max-width: 760px; margin: 19px 0 17px; font-size: clamp(19px, 1.85vw, 25px); line-height: 1.39; letter-spacing: -.035em; font-weight: 700; }
 .question-code { margin: -3px 0 17px; padding: 16px 18px; overflow-x: auto; border: 1px solid #2a2142; border-radius: 11px; background: #211936; color: #c9fff2; font: 12px/1.8 'DM Mono', monospace; box-shadow: inset 4px 0 0 var(--aqua); }
 .answer-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
-.answer-option { display: flex; align-items: center; gap: 11px; min-height: 65px; width: 100%; padding: 12px 13px; border: 1.5px solid var(--ink); border-radius: 12px; color: var(--ink); text-align: left; cursor: pointer; transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease, opacity .16s ease; }
-.answer-option:not(:disabled):hover { transform: translateY(-3px) rotate(-.25deg); box-shadow: 0 4px 0 var(--ink); }
-.answer-option:not(:disabled):active { transform: translateY(1px); box-shadow: none; }
+.answer-option { display: flex; align-items: center; gap: 11px; min-height: 65px; width: 100%; padding: 12px 13px; border: 1.5px solid var(--ink); border-radius: 12px; color: var(--ink); text-align: left; cursor: pointer; transition: box-shadow .16s ease, border-color .16s ease, opacity .16s ease, filter .16s ease; }
+.answer-option:not(:disabled):hover { transform: none; box-shadow: 0 3px 0 var(--ink), 0 0 0 2px rgba(107,53,244,.13); filter: saturate(1.04); }
+.answer-option:not(:disabled):active { transform: none; box-shadow: 0 1px 0 var(--ink); }
 .answer-option:disabled { cursor: default; }
 .option-lilac { background: #f2eaff; }
 .option-yellow { background: #fff9bf; }
@@ -2325,6 +2325,7 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #15b8d2; outli
 .confidence-saved { display:flex; align-items:flex-start; gap:8px; padding:11px 12px; border-radius:9px; font-size:12px; line-height:1.45; font-weight:800; }
 .confidence-saved-explicit { color:#155c44; background:#e1fff1; border:1px solid #8cd9bb; }
 .confidence-saved-shaky { color:#71500a; background:#fff5c6; border:1px solid #ecd469; }
+.confidence-saved-idk { color:#633b78; background:#f7eaff; border:1px solid #d9b7ef; }
 .difficulty-filter-control { display:inline-flex; align-items:center; gap:4px; flex-wrap:wrap; padding:3px; border:1px solid #ded5ef; border-radius:10px; background:#f8f5ff; }
 .difficulty-filter-control > span { padding:0 5px; color:#685a7e; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; }
 .difficulty-filter-control button { display:inline-flex; align-items:center; gap:4px; min-height:30px; padding:6px 9px; border:1px solid transparent; border-radius:7px; background:transparent; color:#514164; font-size:10px; font-weight:850; cursor:pointer; }
@@ -2998,26 +2999,6 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #15b8d2; outli
   }
 }
 
-/* DailyQuest note-pointer: warm paper, purple ink, and a confident dark outline.
-   Applied only to mouse/trackpad interactions; touch and text-entry cursors stay native. */
-@media (hover: hover) and (pointer: fine) {
-  button:not(:disabled),
-  a[href],
-  [role="button"],
-  summary,
-  label[for],
-  select,
-  input[type="checkbox"],
-  input[type="radio"] {
-    cursor: url('/note-pointer.svg') 3 2, pointer;
-  }
-
-  button:disabled,
-  [aria-disabled="true"] {
-    cursor: not-allowed;
-  }
-}
-
 /* Mobile welcome companion: remove the side-copy column and make the pet the hero.
    Desktop retains the original two-column companion card unchanged. */
 @media (max-width: 600px) {
@@ -3187,4 +3168,44 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #15b8d2; outli
     background: #fff;
     border-top: 1px solid #eee8f8;
   }
+}
+
+
+/* Quirky, reassuring IDK choice in the open confidence-heading space. */
+.confidence-heading { min-width: 0; }
+.confidence-heading > div { min-width: 0; flex: 1 1 auto; }
+.confidence-idk-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 154px;
+  min-height: 48px;
+  margin-left: auto;
+  padding: 7px 14px;
+  border: 2px solid #322342;
+  border-radius: 12px;
+  color: #322342;
+  background: linear-gradient(135deg, #fff46a 0%, #ffd36b 58%, #ffb7d0 100%);
+  box-shadow: 0 3px 0 #322342;
+  font-weight: 950;
+  cursor: pointer;
+  transition: filter .15s ease, box-shadow .15s ease, border-color .15s ease;
+}
+.confidence-idk-button:hover { transform: none; filter: saturate(1.12) brightness(1.02); box-shadow: 0 4px 0 #322342, 0 0 0 3px rgba(107,53,244,.12); }
+.confidence-idk-button:active { transform: none; box-shadow: 0 1px 0 #322342; }
+.confidence-idk-button strong { font-size: 13px; line-height: 1.1; letter-spacing: .025em; }
+.confidence-idk-button small { color: #59421c; font-size: 10px; font-weight: 850; }
+.confidence-idk-button:focus-visible { outline: 3px solid #15b8d2; outline-offset: 3px; }
+.confidence-shaky-idk { color: #5b3710; background: #fff2d7; border: 1px solid #f0c875; }
+.confidence-metric-idk svg { color: #a64b87; }
+.confidence-analytics-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 700px) {
+  .confidence-heading { align-items: flex-start; flex-wrap: wrap; }
+  .confidence-idk-button { min-width: 0; min-height: 42px; margin-left: auto; padding: 6px 10px; }
+  .confidence-idk-button strong { font-size: 11px; }
+  .confidence-idk-button small { font-size: 9px; }
+  .confidence-analytics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

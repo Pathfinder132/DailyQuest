@@ -46,6 +46,12 @@ const CUES = {
     [329.63, 0.1, 0.12, 'square', 0.17],
     [246.94, 0.21, 0.17, 'triangle', 0.18],
   ],
+  // Friendly, reassuring cue: not knowing yet is part of learning.
+  idk: [
+    [440, 0, 0.11, 'sine', 0.16],
+    [554.37, 0.10, 0.13, 'triangle', 0.17],
+    [659.25, 0.22, 0.18, 'sine', 0.17],
+  ],
   shuffle: [
     [330, 0, 0.065, 'square', 0.17],
     [440, 0.055, 0.065, 'square', 0.18],
@@ -59,15 +65,6 @@ const CUES = {
   return: [
     [523.25, 0, 0.06, 'triangle', 0.17],
     [783.99, 0.075, 0.12, 'square', 0.18],
-  ],
-  confidence: [
-    [587.33, 0, 0.08, 'triangle', 0.16],
-    [783.99, 0.075, 0.09, 'sine', 0.17],
-    [987.77, 0.16, 0.14, 'triangle', 0.18],
-  ],
-  shaky: [
-    [493.88, 0, 0.09, 'triangle', 0.15],
-    [440, 0.085, 0.11, 'sine', 0.15],
   ],
   // Warm, rising sparkle for the pet's evolution.
   petLevelUp: [
